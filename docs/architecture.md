@@ -1,18 +1,18 @@
-# Architecture document for Cangjie Extern type
+# Architecture Document for the Cangjie Extern Type
 
-This document exposes the interoperability implementation architecture for the proposal in [here](https://github.com/danghica/interop/blob/main/cangjie.md).
+This document describes the interoperability architecture for the proposal linked [here](https://github.com/danghica/interop/blob/main/cangjie.md).
 
 ## Overall Architecture
 
-### We provide
+### What We Provide
 
-The following type can be defined (e.g. library/package) or compiler built-in.
+The following type can be defined in a library/package or provided as a compiler built-in.
 
 ```swift
 type Handle = UInt64
 ```
 
-`ExternalVM` below, defined the interface that language specific interp-providers must implement.
+`ExternalVM`, defined below, specifies the interface that language-specific interoperability providers must implement.
 
 ```swift
 interface ExternalVM {
@@ -26,7 +26,7 @@ interface ExternalVM {
 }
 ```
 
-`Extern` type below can be exposed as shown below (e.g. in a library/package) or else be a compiler built-in type.
+The `Extern` type shown below can be exposed in a library/package or provided as a compiler built-in type.
 
 ```swift
 struct Extern {
@@ -36,13 +36,13 @@ struct Extern {
 ```
 
 Summary:
-- `Handle` exposed to the user or built-in
-- `ExternalVM` exposed to the user
-- `Extern` exposed to the user or built-in
+- `Handle` is exposed to the user or provided as a built-in
+- `ExternalVM` is exposed to the user
+- `Extern` is exposed to the user or provided as a built-in
 
-### The specific language interoperability-provider writes
+### What a Language-Specific Interoperability Provider Writes
 
-To provide interoperability support for a new programming language, the implementor should provide a class that implements `ExternalVM`. E.g. below we provide a minimal example for a hypothetical Python VM.
+To provide interoperability support for a new programming language, the implementer should provide a class that implements `ExternalVM`. Below is a minimal example for a hypothetical Python VM.
 
 ```swift
 class PythonVM <: ExternalVM {
@@ -57,11 +57,11 @@ class PythonVM <: ExternalVM {
 }
 ```
 
-The interoperability-provider is free to do anything as long as it implements `ExternalVM`.
+The interoperability provider is free to implement this in any way it chooses, as long as it satisfies `ExternalVM`.
 
-### The user writes
+### What the User Writes
 
-Once `ExternalVM`s are defined, the user can resort to them to interoperate with other languages. Below we show some examples with comments how each line should be interpreted.
+Once `ExternalVM`s are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line should be interpreted.
 
 ```swift
 let vm = PythonVM()
@@ -75,18 +75,18 @@ func foo(x: Extern) {
     // => x.ctx.update(x.handle, "Hello")
 }
 
-foo("world" @ vm)                 // syntax example
+foo("world" @ vm)                 // example syntax
 // => foo(vm.create("world"))
 ```
 
 ## Tasks
 
 1. Provide a library or add compiler built-in support for `Handle`, `Extern`, `ExternalVM`.
-    - might need compiler support
-2. Parsing (optional, if we want to support new syntax like `"world" @ vm`) + type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
-    - need compiler support
+    - This might require compiler support.
+2. Parsing (optional, if we want to support new syntax such as `"world" @ vm`) and type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
+    - This requires compiler support.
 3. Program transformations (e.g. `let s: String = x` => `let s: String = x.ctx.convert<String>(x.handle)`)
-    - possible to implement with the compiler/CHIR plugins
+    - This may be possible to implement with compiler/CHIR plugins.
 
-Additionally we might need to provide a proof-of-concept implementation of `ExternalVM` (e.g. ArkTS)
-4. Proof-of-concept interoperability implementation for a specific programming language
+Additionally, we might want to provide a proof-of-concept implementation of `ExternalVM` for a specific programming language (e.g. ArkTS):
+4. Provide a proof-of-concept interoperability implementation for a specific programming language.
