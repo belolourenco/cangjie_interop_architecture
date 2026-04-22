@@ -21,7 +21,7 @@ interface ExternalVM {
     func create<T>(value: T) : Handle
 
     func getGlobal(name: String) : Handle
-    func callFunction(handle: Handle, args: Array<Any>) : Handle
+
     func callMethod(h: Handle, name: String, args: Array<Any>) : Handle
     func setField<T>(h: Handle, name: String, value: T) : Unit
     func getField(h: Handle, name: String) : Handle
@@ -54,7 +54,6 @@ class PythonVM <: ExternalVM {
     public func create<T>(value: T) : Handle { ... }
 
     public func getGlobal(name: String) : Handle : Handle { ... }
-    public func callFunction(handle: Handle, args: Array<Any>) : Handle { ... }
 
     public func callMethod(h: Handle, name: String, args: Array<Any>) : Handle { ... }
     public func setField<T>(h: Handle, name: String, value: T) : Unit { ... }
@@ -98,13 +97,18 @@ Additionally, we might want to provide a proof-of-concept implementation of `Ext
 4. Provide a proof-of-concept interoperability implementation for a specific programming language.
 
 
-## Type Checking and Program transformations
+## WIP: Type Checking and Program transformations
 
-Let `e1, e2: Extern`, `PythonVM <: ExternalVM`. The following expressions type-check and are transformed as indicated in the comments:
+Let `e1, e2: Extern`, `PythonVM <: ExternalVM`.
+
+The following expressions type-check and are transformed as indicated in the comments:
 
 ```swift
 let s: String = e1
 // => let s: String = e1.ctx.convert<String>(e1.handle)
+
+var t: String = e1
+// => var t: String = e1.ctx.convert<String>(e1.handle)
 
 e1 = "Hello"
 // => e1.ctx.update(e1.handle, "Hello")
@@ -117,9 +121,9 @@ e1 = e2
 //    }
 
 let vm = PythonVM()
-let f : External = vm.getGlobal("f")
-f("hello world")
-// => f.ctx.callFunction(f.handle, "hello world")
+let g : String -> Extern = vm.getGlobal("g")
+// => let tmp = vm.getGlobal("g"); let g : String -> Extern = tmp.ctx.convert<String -> Extern>(tmp.handle)
+g("hello world")
 
 let x = e1.f1.f2.f3
 // => let x = e1.ctx.getField(e1.ctx.getField(e1.ctx.getField(e1.handle, "f1"), "f2"), "f3")
@@ -133,5 +137,20 @@ let y = e1.foo("goo")
 // => e1.ctx.callMethod(e1.handle, "foo", ["goo"])
 ```
 
-
 To be discussed: is `let x: Extern = ...` the same as `var x: Extern = ...`?
+
+Type-checking OK/FAIL
+
+```swift
+let f : Extern = vm.getGlobal("f")    // OK
+f("hello world")                      // FAIL
+f(42)                                 // FAIL
+let f_s : String -> Extern = f        // OK
+// let f_s : String -> Extern = f.ctx.convert<String -> Extern>(f.handle)
+f_s("hello world")                    // OK
+f_s(42)                               // FAIL
+let f_i : Int64 -> Extern = f         // OK
+// let f_i : String -> Extern = f.ctx.convert<String -> Extern>(f.handle)
+f_i("hello world")                    // FAIL
+f_i(42)                               // OK
+```
