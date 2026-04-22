@@ -28,7 +28,7 @@ interface ExternalVM {
 }
 ```
 
-The `Extern` type shown below can be exposed in a library/package or provided as a compiler built-in type.
+The `Extern` type shown below can be exposed in a library/package or provided as a compiler built-in type that has this as its representation.
 
 ```cangjie
 struct Extern {
@@ -53,7 +53,7 @@ class PythonVM <: ExternalVM {
     public func update<T>(h: Handle, value: T) : Unit { ... }
     public func create<T>(value: T) : Handle { ... }
 
-    public func getGlobal(name: String) : Handle : Handle { ... }
+    public func getGlobal(name: String) : Handle { ... }
 
     public func callMethod(h: Handle, name: String, args: Array<Any>) : Handle { ... }
     public func setField<T>(h: Handle, name: String, value: T) : Unit { ... }
@@ -87,7 +87,7 @@ foo("world" @ vm)                 // example syntax
 
 1. Provide a library or add compiler built-in support for `Handle`, `Extern`, `ExternalVM`.
     - This might require compiler support.
-2. Parsing (optional, if we want to support new syntax such as `"world" @ vm`) and type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
+2. Parsing (optional, if we want to support new syntax such as `"world" @ vm` or have `Extern` as a keyword) and type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
     - This requires compiler support.
 3. Program transformations (e.g. `let s: String = x` => `let s: String = x.ctx.convert<String>(x.handle)`)
     - This may be possible to implement with compiler/CHIR plugins.
@@ -115,14 +115,16 @@ e1 = "Hello"
 
 e1 = e2
 // => if (refEq(e1.ctx, e2.ctx)) {
-//      e1.ctx.update(e1.handle, e2.handle) )
+//      e1.ctx.update(e1.handle, e2.handle)
 //    } else {
 //      throw InvalidAssignmentException
 //    }
 
+// Have `getGlobal` as a free function at the top level that wraps the result of `ExternalVM.getGlobal` in an `Extern`
+// func getGlobal<T: ExternalVM>(t: T, s: String): Extern { Extern(vm, vm.getGlobal("g")) }
 let vm = PythonVM()
-let g : String -> Extern = vm.getGlobal("g")
-// => let tmp = vm.getGlobal("g"); let g : String -> Extern = tmp.ctx.convert<String -> Extern>(tmp.handle)
+let g : (String) -> Extern = getGlobal(vm, "g")
+// => let tmp = getGlobal(vm, "g"); let g : (String) -> Extern = tmp.ctx.convert<(String) -> Extern>(tmp.handle)
 g("hello world")
 
 let x = e1.f1.f2.f3
@@ -142,15 +144,15 @@ To be discussed: is `let x: Extern = ...` the same as `var x: Extern = ...`?
 Type-checking OK/FAIL
 
 ```cangjie
-let f : Extern = vm.getGlobal("f")    // OK
+let f : Extern = getGlobal(vm, "f")   // OK
 f("hello world")                      // FAIL
 f(42)                                 // FAIL
-let f_s : String -> Extern = f        // OK
-// let f_s : String -> Extern = f.ctx.convert<String -> Extern>(f.handle)
+let f_s : (String) -> Extern = f        // OK
+// let f_s : (String) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
 f_s("hello world")                    // OK
 f_s(42)                               // FAIL
-let f_i : Int64 -> Extern = f         // OK
-// let f_i : String -> Extern = f.ctx.convert<String -> Extern>(f.handle)
+let f_i : (Int64) -> Extern = f         // OK
+// let f_i : (Int64) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
 f_i("hello world")                    // FAIL
 f_i(42)                               // OK
 ```
