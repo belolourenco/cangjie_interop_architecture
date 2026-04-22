@@ -8,13 +8,13 @@ This document describes the interoperability architecture for the proposal linke
 
 The following type can be defined in a library/package or provided as a compiler built-in. Note that `UInt64` is not fixed and needs to be decided later.
 
-```swift
+```cangjie
 type Handle = UInt64
 ```
 
 `ExternalVM`, defined below, specifies the interface that language-specific interoperability providers must implement.
 
-```swift
+```cangjie
 interface ExternalVM {
     func convert<T>(h: Handle) : T
     func update<T>(h: Handle, value: T) : Unit
@@ -30,7 +30,7 @@ interface ExternalVM {
 
 The `Extern` type shown below can be exposed in a library/package or provided as a compiler built-in type.
 
-```swift
+```cangjie
 struct Extern {
     let ctx : ExternalVM
     let handle : Handle
@@ -46,7 +46,7 @@ Summary:
 
 To provide interoperability support for a new programming language, the implementer should provide a class that implements `ExternalVM`. Below is a minimal example for a hypothetical Python VM.
 
-```swift
+```cangjie
 class PythonVM <: ExternalVM {
     public init () { ... }
     public func convert<T>(h: Handle) : T { ... }
@@ -67,7 +67,7 @@ The interoperability provider is free to implement this in any way it chooses, a
 
 Once `ExternalVM`s are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line should be interpreted.
 
-```swift
+```cangjie
 let vm = PythonVM()
 
 func foo(x: Extern) {
@@ -103,7 +103,7 @@ Let `e1, e2: Extern`, `PythonVM <: ExternalVM`.
 
 The following expressions type-check and are transformed as indicated in the comments:
 
-```swift
+```cangjie
 let s: String = e1
 // => let s: String = e1.ctx.convert<String>(e1.handle)
 
@@ -141,7 +141,7 @@ To be discussed: is `let x: Extern = ...` the same as `var x: Extern = ...`?
 
 Type-checking OK/FAIL
 
-```swift
+```cangjie
 let f : Extern = vm.getGlobal("f")    // OK
 f("hello world")                      // FAIL
 f(42)                                 // FAIL
