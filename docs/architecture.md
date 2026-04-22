@@ -89,4 +89,23 @@ foo("world" @ vm)                 // example syntax
     - This may be possible to implement with compiler/CHIR plugins.
 
 Additionally, we might want to provide a proof-of-concept implementation of `ExternalVM` for a specific programming language (e.g. ArkTS):
+
 4. Provide a proof-of-concept interoperability implementation for a specific programming language.
+
+
+## Type Checking and Program transformations
+
+Let `e1, e2: Extern`. The following is allowed:
+
+```swift
+let s: String = e1
+// => let s: String = e1.ctx.convert<String>(e1.handle)
+
+e1 = "Hello"
+// => e1.ctx.update(e1.handle, "Hello")
+
+e1 = e2
+// => 
+```
+
+// TODO
