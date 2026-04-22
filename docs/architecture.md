@@ -22,7 +22,7 @@ interface ExternalVM {
 
     func callMethod(h: Handle, name: String, args: Array<Any>) : Handle
     func setField<T>(h: Handle, name: String, value: T): Unit
-    func getField(h: Handle, name: String)
+    func getField(h: Handle, name: String): Handle
 }
 ```
 
@@ -53,7 +53,7 @@ class PythonVM <: ExternalVM {
 
     public func callMethod(h: Handle, name: String, args: Array<Any>) : Handle { ... }
     public func setField<T>(h: Handle, name: String, value: T): Unit { ... }
-    public func getField(h: Handle, name: String) { ... }
+    public func getField(h: Handle, name: String): Handle { ... }
 }
 ```
 
@@ -69,10 +69,10 @@ let vm = PythonVM()
 func foo(x: Extern) {
 
     let s: String = x
-    // => let s: String = x.convert<String>(x.handle)
+    // => let s: String = x.ctx.convert<String>(x.handle)
 
     x = "Hello"
-    // => x.update(x.handle, "Hello")
+    // => x.ctx.update(x.handle, "Hello")
 }
 
 foo("world" @ vm)                 // syntax example
@@ -85,7 +85,7 @@ foo("world" @ vm)                 // syntax example
     - might need compiler support
 2. Parsing (optional, if we want to support new syntax like `"world" @ vm`) + type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
     - need compiler support
-3. Program transformations (e.g. `let s: String = x` => `let s: String = x.convert<String>(x.handle)`)
+3. Program transformations (e.g. `let s: String = x` => `let s: String = x.ctx.convert<String>(x.handle)`)
     - possible to implement with the compiler/CHIR plugins
 
 Additionally we might need to provide a proof-of-concept implementation of `ExternalVM` (e.g. ArkTS)
