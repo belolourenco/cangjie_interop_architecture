@@ -144,15 +144,15 @@ To be discussed: is `let x: Extern = ...` the same as `var x: Extern = ...`?
 Type-checking OK/FAIL
 
 ```cangjie
-let f : Extern = getGlobal(vm, "f")   // OK
-f("hello world")                      // FAIL
-f(42)                                 // FAIL
+let f : Extern = getGlobal(vm, "f")     // OK
+f("hello world")                        // FAIL
+f(42)                                   // FAIL
 let f_s : (String) -> Extern = f        // OK
 // let f_s : (String) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
-f_s("hello world")                    // OK
-f_s(42)                               // FAIL
+f_s("hello world")                      // OK
+f_s(42)                                 // FAIL
 let f_i : (Int64) -> Extern = f         // OK
 // let f_i : (Int64) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
-f_i("hello world")                    // FAIL
-f_i(42)                               // OK
+f_i("hello world")                      // FAIL
+f_i(42)                                 // OK
 ```
