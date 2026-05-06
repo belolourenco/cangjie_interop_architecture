@@ -82,13 +82,13 @@ public class PythonRuntime <: Runtime<PythonRuntime> {
 }
 
 main() {
-    let vm = ArkTSRuntime().instance()
-    let e1 = 
-    let x = e1.ctx.convert<Int64>(e1.handle)
-    println(x)
-    let e2 = Extern(vm, vm.create(43))
-    e1.ctx.update(e1.handle, 44)
-    let y = e1.ctx.convert<Int64>(e1.handle)
-    println(y)
+    // let vm = ArkTSRuntime().instance()
+    // let e1 = 
+    // let x = e1.ctx.convert<Int64>(e1.handle)
+    // println(x)
+    // let e2 = Extern(vm, vm.create(43))
+    // e1.ctx.update(e1.handle, 44)
+    // let y = e1.ctx.convert<Int64>(e1.handle)
+    // println(y)
 
 }
