@@ -49,7 +49,10 @@ abstract public class DummyRuntime <: Runtime {
             "geocoding",
             DummyRuntime.toExtern({ symbolName: String =>
                 match (symbolName) {
-                    case "lookup" => DummyRuntime.toExtern({ lat: Handle, long: Handle => toExtern((fromExtern<Float32>(lat), fromExtern<Float32>(long))) })
+                    case "lookup" => DummyRuntime.toExtern({ lat: Handle, long: Handle =>
+                            println("lookup: I was called!")
+                            toExtern((fromExtern<Float32>(lat), fromExtern<Float32>(long))) 
+                        })
                     case _ => throw ExternDynamicException("Function not found: ${symbolName}")
                 }
             })
@@ -75,10 +78,16 @@ abstract public class DummyRuntime <: Runtime {
     }
     
     static private func performCall(handle: Handle, fields: ArrayList<String>, arguments: ArrayList<Handle>): Handle {
-        let f = fromExtern<(String) -> Handle>(handle)
-        let handle2 = f(fields[0])
-        let f2 = fromExtern<(Handle, Handle) -> Handle>(handle2)
-        f2(arguments[0], arguments[1])
+        match (pool[handle]) {
+            case module: (String) -> Handle =>
+                let functionHandle = module(fields[0])
+                match (pool[functionHandle]) {
+                    case function: (Handle, Handle) -> Handle =>
+                        function(arguments[0], arguments[1])
+                    case _ => throw ExternDynamicException("Function not found: ${functionHandle}")
+                }
+            case _ => throw ExternDynamicException("Function not found: ${handle}")
+        }
     }
 
     static private func performFieldAccess(handle: Handle, fields: ArrayList<String>): Handle {
