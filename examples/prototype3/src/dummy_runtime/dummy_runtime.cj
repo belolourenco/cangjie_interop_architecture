@@ -55,15 +55,30 @@ abstract public class DummyRuntime <: Runtime {
     }
 
     static private func performFieldAccess(handle: Handle, fields: ArrayList<String>): Handle {
-        let value = pool[handle]
-        match (value) {
-            case point: Point =>
-                match (fields[0]) {
-                    case "x" => toExtern(point.x)
-                    case "y" => toExtern(point.y)
-                    case _ => throw ExternDynamicException("Field not found: ${fields[0]}")
-                }
-            case _ => throw ExternDynamicException("Value not supported by DummyRuntime")
+        var value = pool[handle]
+        var it = 0
+        while (it < fields.size) {
+            match (value) {
+                case point: Point =>
+                    match (fields[it]) {
+                        case "x" => value = point.x
+                        case "y" => value = point.y
+                        case _ => throw ExternDynamicException("Field not found: ${fields[0]}")
+                    }
+                case rectangle: Rectangle =>
+                    match (fields[it]) {
+                        case "topLeft" => value = rectangle.topLeft
+                        case "bottomRight" => value = rectangle.bottomRight
+                        case _ => throw ExternDynamicException("Field not found: ${fields[0]}")
+                    }
+                case _ => throw ExternDynamicException("Value not supported by DummyRuntime")
+            }
+            it++
+        }
+        if (it == fields.size) {
+            return toExtern(value)
+        } else {
+            throw ExternDynamicException("Field not found: ${fields}")
         }
     }
 

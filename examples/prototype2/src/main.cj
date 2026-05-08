@@ -28,7 +28,7 @@ class Point {
 
     public mut prop x: Float64 {
         get() {
-            // DummyRuntime.fromExtern<Float64>(blob.x)
+            // blob.x
             // ->
             let x_handle: Handle = DummyRuntime.eval(parseExpr(quote($(blob.handle).x)))
             DummyRuntime.fromExtern<Float64>(x_handle)
@@ -42,7 +42,7 @@ class Point {
 
     public mut prop y: Float64 {
         get() {
-            // DummyRuntime.fromExtern<Float64>(blob.y)
+            // blob.y
             // ->
             let x_handle: Handle = DummyRuntime.eval(parseExpr(quote($(blob.handle).y)))
             DummyRuntime.fromExtern<Float64>(x_handle)

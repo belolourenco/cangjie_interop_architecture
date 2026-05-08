@@ -17,7 +17,7 @@ func lookup(lat: Float32, long: Float32): Extern<DummyRuntime> {
 // Alternative if we make getModule a method of the Runtime interface:
 // class Point<T> where T <: Runtime {
 class Point {
-    private var blob : Extern<DummyRuntime>
+    public let blob : Extern<DummyRuntime>
     public Point(x: Float64, y: Float64) {
         let shapeModule: Extern<DummyRuntime> = DummyRuntime.getModule("shape")
 
@@ -28,7 +28,7 @@ class Point {
 
     public mut prop x: Float64 {
         get() {
-            // DummyRuntime.fromExtern<Float64>(blob.x)
+            // blob.x
             // ->
             let x_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["x"])))
             DummyRuntime.fromExtern<Float64>(x_handle)
@@ -42,7 +42,7 @@ class Point {
 
     public mut prop y: Float64 {
         get() {
-            // DummyRuntime.fromExtern<Float64>(blob.y)
+            // blob.y
             // ->
             let x_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["y"])))
             DummyRuntime.fromExtern<Float64>(x_handle)
@@ -53,6 +53,62 @@ class Point {
             DummyRuntime.eval(Assignment(blob.handle, ArrayList<String>(["y"]), DummyRuntime.toExtern(v)))
         }
     }
+}
+
+class Rectangle {
+    private var blob : Extern<DummyRuntime>
+    public Rectangle(topLeft: Point, bottomRight: Point) {
+        let shapeModule: Extern<DummyRuntime> = DummyRuntime.getModule("shape")
+
+        // blob = shapeModule.Rectangle(topLeft, bottomRight)
+        // ->
+        blob = Extern<DummyRuntime>(DummyRuntime.eval(Call(shapeModule.handle, ArrayList<String>(["Rectangle"]), ArrayList<Handle>([topLeft.blob.handle, bottomRight.blob.handle]))))
+    }
+
+    public mut prop topLeft: Point {
+        get() {
+            // blob.topLeft
+            // ->
+            let topLeft_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["topLeft"])))
+            Point(DummyRuntime.fromExtern<Float64>(DummyRuntime.eval(FieldAccess(topLeft_handle, ArrayList<String>(["x"])))),
+                  DummyRuntime.fromExtern<Float64>(DummyRuntime.eval(FieldAccess(topLeft_handle, ArrayList<String>(["y"])))))
+        }
+        set(v) {
+            // blob.topLeft = v
+            // ->
+            DummyRuntime.eval(Assignment(blob.handle, ArrayList<String>(["topLeft"]), v.blob.handle))
+        }
+    }
+
+    public mut prop bottomRight: Point {
+        get() {
+            // blob.bottomRight
+            // ->
+            let bottomRight_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["bottomRight"])))
+            Point(DummyRuntime.fromExtern<Float64>(DummyRuntime.eval(FieldAccess(bottomRight_handle, ArrayList<String>(["x"])))),
+                  DummyRuntime.fromExtern<Float64>(DummyRuntime.eval(FieldAccess(bottomRight_handle, ArrayList<String>(["y"])))))
+        }
+        set(v) {
+            // blob.bottomRight = v
+            // ->
+            DummyRuntime.eval(Assignment(blob.handle, ArrayList<String>(["bottomRight"]), v.blob.handle))
+        }
+    }
+
+    public func perimeter(): Float64 {
+        // DummyRuntime.fromExtern<Float64>(blob.perimeter())
+        // ->
+        let perimeter_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["perimeter"])))
+        DummyRuntime.fromExtern<Float64>(perimeter_handle)
+    }
+
+    public func area(): Float64 {
+        // DummyRuntime.fromExtern<Float64>(blob.area())
+        // ->
+        let area_handle: Handle = DummyRuntime.eval(FieldAccess(blob.handle, ArrayList<String>(["area"])))
+        DummyRuntime.fromExtern<Float64>(area_handle)
+    }
+    
 }
 
 main() {
@@ -122,4 +178,19 @@ main() {
     point.y = 6.0
 
     println("Point: (${point.x}, ${point.y})")
+
+    // ---- Rectangle ----
+    let rectangle: Rectangle = Rectangle(Point(0.0, 0.0), Point(10.0, 10.0))
+
+    println("Rectangle: (${rectangle.topLeft.x}, ${rectangle.topLeft.y}), (${rectangle.bottomRight.x}, ${rectangle.bottomRight.y})")
+
+    // rectangle.topLeft = Point(1.0, 1.0)
+    // rectangle.bottomRight = Point(9.0, 9.0)
+    
+    // println("Rectangle: (${rectangle.topLeft.x}, ${rectangle.topLeft.y}), (${rectangle.bottomRight.x}, ${rectangle.bottomRight.y})")
+    
+    // println("Rectangle perimeter: ${rectangle.perimeter()}")
+    // println("Rectangle area: ${rectangle.area()}")
+
+    // println("Rectangle: (${rectangle.topLeft.x}, ${rectangle.topLeft.y}, ${rectangle.bottomRight.x}, ${rectangle.bottomRight.y})")
 }
