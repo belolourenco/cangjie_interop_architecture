@@ -1,4 +1,4 @@
-package prototype2.dummy_runtime
+package prototype3.dummy_runtime
 
 import std.math.*
 
