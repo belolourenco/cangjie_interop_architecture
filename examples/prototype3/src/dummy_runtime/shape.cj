@@ -16,7 +16,7 @@ public interface Shape {
 }
 
 public class Rectangle <: Shape {
-    public Rectangle(public let topLeft: Point, public let bottomRight: Point) { }
+    public Rectangle(public var topLeft: Point, public var bottomRight: Point) { }
 
     public func area(): Float64 {
         (bottomRight.x - topLeft.x) * (bottomRight.y - topLeft.y)
