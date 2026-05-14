@@ -119,6 +119,12 @@ export const circle = new Circle(5);
 export const rectangle = new Rectangle(4, 6);
 export const triangle = new Triangle(3, 4);
 
+export function createRectangle(): Rectangle {
+  let width = 12
+  let height = 13
+  return new Rectangle(width, height);
+}
+
 // Calculate and print area and perimeter
 hilog.info(0, "MYLOG", `Circle - Area: ${circle.area()}, Perimeter: ${circle.perimeter()}`);
 hilog.info(0, "MYLOG", `Rectangle - Area: ${rectangle.area()}, Perimeter: ${rectangle.perimeter()}`);

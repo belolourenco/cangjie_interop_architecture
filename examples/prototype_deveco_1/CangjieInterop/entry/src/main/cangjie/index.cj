@@ -76,6 +76,17 @@ func mytest(context: JSContext) {
     mylog("Rectangle width: ${rectangleWidth}")
     let rectangleHeight = rectangleObject.callMethod("getHeight", []).asNumber().toFloat64()
     mylog("Rectangle height: ${rectangleHeight}")
+
+    // ---- createRectangle ----
+    let widthJSValue2 = context.number(12).toJSValue()
+    let heightJSValue2 = context.number(13).toJSValue()
+    let rectangleJSValue2 = arktsModule["createRectangle"].asFunction().call()
+    let rectangleObject2 = rectangleJSValue2.asObject()
+
+    let rectangleWidth2 = rectangleObject2.callMethod("getWidth", []).asNumber().toFloat64()
+    mylog("Rectangle width: ${rectangleWidth2}")
+    let rectangleHeight2 = rectangleObject2.callMethod("getHeight", []).asNumber().toFloat64()
+    mylog("Rectangle height: ${rectangleHeight2}")
 }
 
 func arkts_demo_entry_point() {
