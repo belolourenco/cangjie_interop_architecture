@@ -17,30 +17,17 @@ public class ExternDynamicException <: Exception {
     }
 }
 
-public enum Expr <: ToString {
-    | FieldAccess(Handle, ArrayList<String>)             // baseExpr , fields
-    | Call(Handle, ArrayList<String>, ArrayList<Handle>) // baseExpr , fields , arguments
-    | Assignment(Handle, ArrayList<String>, Handle)      // baseExpr , fields , value
+public interface Runtime<T> where T <: Runtime<T> {
+    static func evalMemberAccess(e: Extern<T>, field: String)            : Extern<T>
+    static func evalFunctionCall(e: Extern<T>, args: Array<Any>)         : Extern<T>
+    static func evalIndexAccess (e: Extern<T>, arg: Any)                 : Extern<T>
+    static func evalAssignment  (e: Extern<T>, field: String, value: Any): Unit
 
-    public func toString(): String {
-        match (this) {
-            case FieldAccess(baseExpr, fields) =>
-                "FieldAccess(${baseExpr}, ${fields})"
-            case Call(baseExpr, fields, arguments) =>
-                "Call(${baseExpr}, ${fields}, ${arguments})"
-            case Assignment(baseExpr, fields, value) =>
-                "Assignment(${baseExpr}, ${fields}, ${value})"
-        }
-    }
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
 }
 
-public interface Runtime {
-    static func eval(e: Expr): Handle
-    static func fromExtern<R>(h: Handle): R
-    static func toExtern<R>(v: R): Handle
-}
-
-public struct Extern<T> where T <: Runtime {
+public struct Extern<T> where T <: Runtime<T> {
     public Extern(public let handle : Handle) { }
 }
 
