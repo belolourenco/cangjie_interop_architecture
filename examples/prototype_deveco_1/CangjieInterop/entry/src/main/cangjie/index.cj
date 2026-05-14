@@ -83,9 +83,9 @@ func mytest(context: JSContext) {
     let rectangleJSValue2 = arktsModule["createRectangle"].asFunction().call()
     let rectangleObject2 = rectangleJSValue2.asObject()
 
-    let rectangleWidth2 = rectangleObject2.callMethod("getWidth", []).asNumber().toFloat64()
+    let rectangleWidth2 = rectangleObject2.getProperty("width").asNumber().toFloat64()
     mylog("Rectangle width: ${rectangleWidth2}")
-    let rectangleHeight2 = rectangleObject2.callMethod("getHeight", []).asNumber().toFloat64()
+    let rectangleHeight2 = rectangleObject2.getProperty("height").asNumber().toFloat64()
     mylog("Rectangle height: ${rectangleHeight2}")
 }
 
