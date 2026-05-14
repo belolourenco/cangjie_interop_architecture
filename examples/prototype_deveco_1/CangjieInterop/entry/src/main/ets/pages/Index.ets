@@ -1,4 +1,5 @@
 import { testCJ } from 'libohos_app_cangjie_entry.so';
+import '../my_arkts_module'
 
 @Entry
 @Component

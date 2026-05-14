@@ -11,12 +11,21 @@ import ohos.ark_interop.JSCallInfo
 import ohos.ark_interop.JSValue
 import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import std.math.numeric.BigInt
+import ohos.ark_interop.JSRuntime
+import ohos.arkui.state_management.AppStorage
+
+class Assert {
+    public static func isUnreachable(reason!: String = "") {
+        mylog("unreachable, ${reason}")
+        throw Exception()
+    }
+}
 
 func testCJ(runtime: JSContext, callInfo: JSCallInfo): JSValue {
     try {
 //        dummy_demo_entry_point()
-        arkts_demo_entry_point()
-
+        // arkts_demo_entry_point()
+        mytest(runtime)
     } catch (e: Exception) {
         mylog(printStackTrace(e))
     }
@@ -26,6 +35,47 @@ func testCJ(runtime: JSContext, callInfo: JSCallInfo): JSValue {
 
 let EXPORT_MODULE = JSModule.registerModule {
     runtime, exports => exports["testCJ"] = runtime.function(testCJ).toJSValue()
+}
+
+func mytest(context: JSContext) {
+//    let jsRuntime = JSRuntime()
+//    let context2 = jsRuntime.mainContext
+
+    // ---- ArkTS Module ----
+    let arktsModule = context.requireArkModule("entry/src/main/ets/my_arkts_module").asObject()
+
+    // ---- my_arkts_function ----
+    arktsModule["my_arkts_function"].asFunction().call()
+
+    // ---- Lookup ----
+    let lat = context.number(42.4242).toJSValue()
+    let long = context.number(1.111).toJSValue()
+    let lookupResultValue = arktsModule["lookup"].asFunction().call([lat, long])
+    let lookupResultObject = lookupResultValue.asObject()
+    mylog("Lookup result: ${lookupResultObject.keys()}")
+
+    let coordinatesJSValue = lookupResultObject.getProperty("coordinates")
+    let nameJSValue = lookupResultObject.getProperty("name")
+    let cityJSValue = lookupResultObject.getProperty("city")
+    let categoryJSValue = lookupResultObject.getProperty("category")
+
+    let coordinates = coordinatesJSValue.asArray()
+    let name = nameJSValue.asString()
+    let city = cityJSValue.asString()
+    let category = categoryJSValue.asString()
+    mylog("Coordinates: (${coordinates[0].asNumber().toFloat64()}, ${coordinates[1].asNumber().toFloat64()}), Name: ${name}, City: ${city}, Category: ${category}")
+
+
+    // ---- Rectangle ----
+    let widthJSValue = context.number(10).toJSValue()
+    let heightJSValue = context.number(11).toJSValue()
+    let rectangleJSValue = arktsModule["Rectangle"].asClass().new([widthJSValue, heightJSValue])
+    let rectangleObject = rectangleJSValue.asObject()
+
+    let rectangleWidth = rectangleObject.callMethod("getWidth", []).asNumber().toFloat64()
+    mylog("Rectangle width: ${rectangleWidth}")
+    let rectangleHeight = rectangleObject.callMethod("getHeight", []).asNumber().toFloat64()
+    mylog("Rectangle height: ${rectangleHeight}")
 }
 
 func arkts_demo_entry_point() {
@@ -130,7 +180,7 @@ func testInt32() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_int32.handle)
-        mylog("Int8: ${fourty_two_int8}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int8: expected overflow")
     }
@@ -139,7 +189,7 @@ func testInt32() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_int32.handle)
-        mylog("Int16: ${fourty_two_int16}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int16: expected overflow")
     }
@@ -186,7 +236,7 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_int64.handle)
-        mylog("Int8: ${fourty_two_int8}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int8: expected overflow")
     }
@@ -195,7 +245,7 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_int64.handle)
-        mylog("Int16: ${fourty_two_int16}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int16: expected overflow")
     }
@@ -204,7 +254,7 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int32 : Int32 = ArkTSRuntime.fromExtern<Int32>(arkTs_fourty_two_from_int64.handle)
-        mylog("Int32: ${fourty_two_int32}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int32: expected overflow")
     }
@@ -246,7 +296,7 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_bigInt.handle)
-        mylog("Int8: ${fourty_two_int8}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int8: expected overflow")
     }
@@ -255,7 +305,7 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_bigInt.handle)
-        mylog("Int16: ${fourty_two_int16}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int16: expected overflow")
     }
@@ -264,7 +314,7 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int32 : Int32 = ArkTSRuntime.fromExtern<Int32>(arkTs_fourty_two_from_bigInt.handle)
-        mylog("Int32: ${fourty_two_int32}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int32: expected overflow")
     }
@@ -273,7 +323,7 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int64 : Int64 = ArkTSRuntime.fromExtern<Int64>(arkTs_fourty_two_from_bigInt.handle)
-        mylog("Int64: ${fourty_two_int64}")
+        Assert.isUnreachable()
     } catch (e: Exception) {
         mylog("Int64: expected overflow")
     }
