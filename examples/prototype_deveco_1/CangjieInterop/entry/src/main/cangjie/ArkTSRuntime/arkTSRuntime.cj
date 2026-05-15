@@ -6,65 +6,7 @@ import ohos.ark_interop.JSRuntime
 import std.collection.ArrayList
 import ohos.ark_interop.JSValue
 import std.math.numeric.BigInt
-
-func mytest(context: JSContext) {
-//    let jsRuntime = JSRuntime()
-//    let context2 = jsRuntime.mainContext
-
-    // ---- ArkTS Module ----
-    let arktsModule = context.requireArkModule("entry/src/main/ets/my_arkts_module").asObject()
-
-    // ---- my_arkts_function ----
-    arktsModule["my_arkts_function"].asFunction().call()
-
-    // ---- Lookup ----
-    let lat = context.number(42.4242).toJSValue()
-    let long = context.number(1.111).toJSValue()
-    let lookupResultValue = arktsModule["lookup"].asFunction().call([lat, long])
-    let lookupResultObject = lookupResultValue.asObject()
-    mylog("Lookup result: ${lookupResultObject.keys()}")
-
-    let coordinatesJSValue = lookupResultObject.getProperty("coordinates")
-    let nameJSValue = lookupResultObject.getProperty("name")
-    let cityJSValue = lookupResultObject.getProperty("city")
-    let categoryJSValue = lookupResultObject.getProperty("category")
-
-    let coordinates = coordinatesJSValue.asArray()
-    let name = nameJSValue.asString()
-    let city = cityJSValue.asString()
-    let category = categoryJSValue.asString()
-    mylog("Coordinates: (${coordinates[0].asNumber().toFloat64()}, ${coordinates[1].asNumber().toFloat64()}), Name: ${name}, City: ${city}, Category: ${category}")
-
-
-    // ---- Rectangle ----
-    let widthJSValue = context.number(10).toJSValue()
-    let heightJSValue = context.number(11).toJSValue()
-    let rectangleJSValue = arktsModule["Rectangle"].asClass().new([widthJSValue, heightJSValue])
-    let rectangleObject = rectangleJSValue.asObject()
-
-    let rectangleWidth = rectangleObject.callMethod("getWidth", []).asNumber().toFloat64()
-    mylog("Rectangle width: ${rectangleWidth}")
-    let rectangleHeight = rectangleObject.callMethod("getHeight", []).asNumber().toFloat64()
-    mylog("Rectangle height: ${rectangleHeight}")
-
-    // ---- createRectangle ----
-    let widthJSValue2 = context.number(12).toJSValue()
-    let heightJSValue2 = context.number(13).toJSValue()
-    let rectangleJSValue2 = arktsModule["createRectangle"].asFunction().call()
-    let rectangleObject2 = rectangleJSValue2.asObject()
-
-    rectangleObject2.setProperty("width", context.number(42).toJSValue())
-
-    let rectangleWidth2 = rectangleObject2.getProperty("width").asNumber().toFloat64()
-    mylog("Rectangle width: ${rectangleWidth2}")
-    let rectangleHeight2 = rectangleObject2.getProperty("height").asNumber().toFloat64()
-    mylog("Rectangle height: ${rectangleHeight2}")
-
-    let area = rectangleObject2.callMethod("area", []).asNumber().toFloat64()
-    mylog("Rectangle area: ${area}")
-    let perimeter = rectangleObject2.callMethod("perimeter", []).asNumber().toFloat64()
-    mylog("Rectangle perimeter: ${perimeter}")
-}
+import ohos.ark_interop.JSObject
 
 private func js2cangjie<T>(value: JSValue, cjType: Option<T>) {
     match(cjType) {
@@ -149,77 +91,80 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
 
     private static let jsRuntime = JSRuntime()
     public static var context = jsRuntime.mainContext
-    
-    private static let pool = ArrayList<JSValue>()
-
-    // TODO: remove this!
-    public static func runDummyTest() {
-        mytest(context)
-    }
 
     public static func evalMemberAccess(e: Extern<ArkTSRuntime>, field: String): Extern<ArkTSRuntime> {
-        throw ExternDynamicException("")
+        Extern((e.content as JSValue).getOrThrow().asObject()[field])
+    }
+
+    private static func toJSValue(v: Any): JSValue {
+        match(v) {
+            case e: Extern<ArkTSRuntime> =>
+                (e.content as JSValue).getOrThrow()
+            case jsValue: JSValue =>
+                jsValue
+            case i: Int8 =>
+                context.number(Int32(i)).toJSValue()
+            case i: Int16 =>
+                context.number(Int32(i)).toJSValue()
+            case i: Int32 =>
+                context.number(i).toJSValue()
+            case i: Int64 =>
+                context.bigint(i).toJSValue()
+            case i: BigInt =>
+                context.bigint(i).toJSValue()
+            case f: Float16 =>
+                context.number(Float64(f)).toJSValue()
+            case f: Float32 =>
+                context.number(Float64(f)).toJSValue()
+            case f: Float64 =>
+                context.number(f).toJSValue()
+            case b: Bool =>
+                context.boolean(b).toJSValue()
+            case s: String =>
+                context.string(s).toJSValue()
+            case _ => throw ExternConversionException("Unsupported type by ArkTSRuntime")
+        }
     }
 
     public static func evalFunctionCall(e: Extern<ArkTSRuntime>, args: Array<Any>): Extern<ArkTSRuntime> {
-        let jsValue = pool[e.handle]
-        throw ExternDynamicException("")
+        let jsValue = (e.content as JSValue).getOrThrow()
+        if (jsValue.isClass()) {
+            let jsClass = jsValue.asClass()
+            Extern(jsClass.new(args.map(toJSValue)))
+        // } else if (jsValue.isObject()) {
+        //     let jsObject = jsValue.asObject()
+        //     Extern(jsObject.callMethod(args.map(toJSValue)))
+        } else if (jsValue.isFunction()) {
+            let jsFunction = jsValue.asFunction()
+            Extern(jsFunction.call(args.map(toJSValue)))
+        } else {
+            throw ExternDynamicException("Expected function or class, got ${jsValue.typeof().toString()}")
+        }
     }
 
     public static func evalAssignment  (e: Extern<ArkTSRuntime>, field: String, value: Any): Unit {
-        let jsValue = pool[e.handle]
+        let jsValue = (e.content as JSValue).getOrThrow()
         throw ExternDynamicException("")
     }
 
     public static func evalIndexAccess (e: Extern<ArkTSRuntime>, arg: Any): Extern<ArkTSRuntime> {
-        throw ExternDynamicException("")
+        let array = (e.content as JSValue).getOrThrow().asArray()
+        // TODO: deal with non Int arguments?!?!! Not sure if this or just change the argument type to Int64?
+        Extern(array[(arg as Int64).getOrThrow()])
     }
 
     public static func getModule(moduleName: String): Extern<ArkTSRuntime> {
         let module = context.requireArkModule(moduleName)
-        pool.add(module)
-        Extern<ArkTSRuntime>(pool.size - 1)
+        Extern<ArkTSRuntime>(module)
     }
 
     public static func fromExtern<T>(e: Extern<ArkTSRuntime>): T {
         let dummy : Option<T> = None
-        let value = pool[e.handle]
+        let value = (e.content as JSValue).getOrThrow()
         js2cangjie(value, dummy)
     }
 
     public static func toExtern<T>(v: T): Extern<ArkTSRuntime> {
-        match(v) {
-            case i: Int8 =>
-                pool.add(context.number(Int32(i)).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case i: Int16 =>
-                pool.add(context.number(Int32(i)).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case i: Int32 =>
-                pool.add(context.number(i).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case i: Int64 =>
-                pool.add(context.bigint(i).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case i: BigInt =>
-                pool.add(context.bigint(i).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case f: Float16 =>
-                pool.add(context.number(Float64(f)).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case f: Float32 =>
-                pool.add(context.number(Float64(f)).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case f: Float64 =>
-                pool.add(context.number(f).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case b: Bool =>
-                pool.add(context.boolean(b).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case s: String =>
-                pool.add(context.string(s).toJSValue())
-                Extern<ArkTSRuntime>(pool.size - 1)
-            case _ => throw ExternConversionException("Unsupported type by ArkTSRuntime")
-        }
+        Extern(toJSValue(v))
     }
 }

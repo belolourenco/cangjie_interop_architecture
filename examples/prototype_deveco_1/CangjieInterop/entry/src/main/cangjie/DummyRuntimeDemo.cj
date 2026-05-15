@@ -35,8 +35,8 @@ class Point {
         get() {
             // blob.x
             // ->
-            let x_handle: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "x")
-            DummyRuntime.fromExtern<Float64>(x_handle)
+            let x_extern: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "x")
+            DummyRuntime.fromExtern<Float64>(x_extern)
         }
         set(v) {
             // blob.x = v
@@ -49,8 +49,8 @@ class Point {
         get() {
             // blob.y
             // ->
-            let x_handle: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "y")
-            DummyRuntime.fromExtern<Float64>(x_handle)
+            let x_extern: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "y")
+            DummyRuntime.fromExtern<Float64>(x_extern)
         }
         set(v) {
             // blob.y = v
@@ -75,8 +75,8 @@ class Rectangle {
         get() {
             // blob.topLeft
             // ->
-            let topLeft_handle: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "topLeft")
-            Point(topLeft_handle)
+            let topLeft_extern: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "topLeft")
+            Point(topLeft_extern)
         }
         set(v) {
             // blob.topLeft = v
@@ -89,8 +89,8 @@ class Rectangle {
         get() {
             // blob.bottomRight
             // ->
-            let bottomRight_handle: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "bottomRight")
-            Point(bottomRight_handle)
+            let bottomRight_extern: Extern<DummyRuntime> = DummyRuntime.evalMemberAccess(blob, "bottomRight")
+            Point(bottomRight_extern)
         }
         set(v) {
             // blob.bottomRight = v
@@ -103,16 +103,16 @@ class Rectangle {
         // DummyRuntime.fromExtern<Float64>(blob.perimeter())
         // ->
         let e_func = DummyRuntime.evalMemberAccess(blob, "perimeter")
-        let perimeter_handle: Extern<DummyRuntime> = DummyRuntime.evalFunctionCall(e_func, [])
-        DummyRuntime.fromExtern<Float64>(perimeter_handle)
+        let perimeter_extern: Extern<DummyRuntime> = DummyRuntime.evalFunctionCall(e_func, [])
+        DummyRuntime.fromExtern<Float64>(perimeter_extern)
     }
 
     public func area(): Float64 {
         // DummyRuntime.fromExtern<Float64>(blob.area())
         // ->
         let e_func = DummyRuntime.evalMemberAccess(blob, "area")
-        let area_handle: Extern<DummyRuntime> = DummyRuntime.evalFunctionCall(e_func, [])
-        DummyRuntime.fromExtern<Float64>(area_handle)
+        let area_extern: Extern<DummyRuntime> = DummyRuntime.evalFunctionCall(e_func, [])
+        DummyRuntime.fromExtern<Float64>(area_extern)
     }
 
 }

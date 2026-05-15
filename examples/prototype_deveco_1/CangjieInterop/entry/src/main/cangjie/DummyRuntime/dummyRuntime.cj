@@ -1,7 +1,6 @@
 package ohos_app_cangjie_entry.DummyRuntime
 
 import ohos_app_cangjie_entry.Extern.*
-
 import std.collection.ArrayList
 
 abstract public class DummyRuntime <: Runtime<DummyRuntime> {
@@ -44,18 +43,16 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
        }
     }
 
-    private static let pool: ArrayList<Any> = ArrayList<Any>([(), geocodingModule, shapeModule])
     static public func getModule(moduleName: String): Extern<DummyRuntime> {
         match (moduleName) {
-            case "geocoding" => Extern<DummyRuntime>(1)
-            case "shape" => Extern<DummyRuntime>(2)
+            case "geocoding" => Extern(geocodingModule)
+            case "shape" => Extern(shapeModule)
             case _ => throw ExternDynamicException("Module not found: ${moduleName}")
         }
     }
 
     public static func evalFunctionCall(e: Extern<DummyRuntime>, args: Array<Any>): Extern<DummyRuntime> {
-        var value = pool[e.handle]
-        match (value) {
+        match (e.content) {
             case function: () -> Extern<DummyRuntime> => function()
             case function: (Extern<DummyRuntime>) -> Extern<DummyRuntime> => function((args[0] as Extern<DummyRuntime>).getOrThrow())
             case function: (Extern<DummyRuntime>, Extern<DummyRuntime>) -> Extern<DummyRuntime> => function((args[0] as Extern<DummyRuntime>).getOrThrow(), (args[1] as Extern<DummyRuntime>).getOrThrow())
@@ -68,9 +65,7 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func evalMemberAccess(e: Extern<DummyRuntime>, field: String): Extern<DummyRuntime> {
-    // static private func performFieldAccess(handle: Handle, fields: ArrayList<String>): Handle {
-        var value = pool[e.handle]
-        match (value) {
+        match (e.content) {
             case point: Point =>
                 match (field) {
                     case "x" => return toExtern(point.x)
@@ -89,9 +84,7 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func evalAssignment(e: Extern<DummyRuntime>, field: String, value: Any): Unit {
-    // static private func performAssignment(handle: Handle, fields: ArrayList<String>, value: Handle): Handle {
-        var content = pool[e.handle]
-        match (content) {
+        match (e.content) {
             case point: Point =>
                 match (field) {
                     case "x" =>
@@ -113,11 +106,10 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func fromExtern<T>(e: Extern<DummyRuntime>): T {
-        (pool[e.handle] as T).getOrThrow()
+        (e.content as T).getOrThrow()
     }
 
     public static func toExtern<T>(v: T): Extern<DummyRuntime> {
-        pool.add(v)
-        Extern(pool.size - 1)
+        Extern(v)
     }
 }

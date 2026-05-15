@@ -3,8 +3,6 @@ package ohos_app_cangjie_entry.Extern
 import std.collection.ArrayList
 import ohos.hilog.Hilog
 
-public type Handle = Int64
-
 public class ExternConversionException <: Exception {
     public ExternConversionException(message: String) {
         super(message)
@@ -28,7 +26,7 @@ public interface Runtime<T> where T <: Runtime<T> {
 }
 
 public struct Extern<T> where T <: Runtime<T> {
-    public Extern(public let handle : Handle) { }
+    public Extern(public let content : Any) { }
 }
 
 
