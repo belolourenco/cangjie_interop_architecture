@@ -7,6 +7,7 @@ import std.collection.ArrayList
 import ohos.ark_interop.JSValue
 import std.math.numeric.BigInt
 import ohos.ark_interop.JSObject
+import ohos.ark_interop.JSFunction
 
 private func js2cangjie<T>(value: JSValue, cjType: Option<T>) {
     match(cjType) {
@@ -92,10 +93,6 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
     private static let jsRuntime = JSRuntime()
     public static var context = jsRuntime.mainContext
 
-    public static func evalMemberAccess(e: Extern<ArkTSRuntime>, field: String): Extern<ArkTSRuntime> {
-        Extern((e.content as JSValue).getOrThrow().asObject()[field])
-    }
-
     private static func toJSValue(v: Any): JSValue {
         match(v) {
             case e: Extern<ArkTSRuntime> =>
@@ -126,25 +123,50 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
         }
     }
 
+    public static func evalMemberAccess(e: Extern<ArkTSRuntime>, field: String): Extern<ArkTSRuntime> {
+        match(e.content) {
+            case jsValue: JSValue =>
+                let fieldValue = jsValue.asObject()[field]
+                if (fieldValue.isFunction() && !fieldValue.isClass()) {
+                    Extern((fieldValue.asFunction(), jsValue))
+                } else {
+                    Extern(fieldValue)
+                }
+            case _ => throw Exception("Not supposed to happen!")
+        }
+    }
+
     public static func evalFunctionCall(e: Extern<ArkTSRuntime>, args: Array<Any>): Extern<ArkTSRuntime> {
-        let jsValue = (e.content as JSValue).getOrThrow()
-        if (jsValue.isClass()) {
-            let jsClass = jsValue.asClass()
-            Extern(jsClass.new(args.map(toJSValue)))
-        // } else if (jsValue.isObject()) {
-        //     let jsObject = jsValue.asObject()
-        //     Extern(jsObject.callMethod(args.map(toJSValue)))
-        } else if (jsValue.isFunction()) {
-            let jsFunction = jsValue.asFunction()
-            Extern(jsFunction.call(args.map(toJSValue)))
-        } else {
-            throw ExternDynamicException("Expected function or class, got ${jsValue.typeof().toString()}")
+        match(e.content) {
+            case methodAndThis: (JSFunction, JSValue) =>
+                let result = methodAndThis[0].call(args.map(toJSValue), thisArg: methodAndThis[1])
+                Extern(result)
+            case jsValue: JSValue =>
+                // if (jsValue.isClass()) {
+                    // I don't understand why this works, but it does!
+                    let jsClass = jsValue.asClass()
+                    Extern(jsClass.new(args.map(toJSValue)))
+                // } else if (jsValue.isObject()) {
+                //     mylog("HMM, here is an object")
+                //     let jsObject = jsValue.asFunction()
+                //     Extern(jsObject.call(args.map(toJSValue)))
+                // } else if (jsValue.isFunction()) {
+                //     mylog("HMM, here is a function")
+                //     let jsFunction = jsValue.asFunction()
+                //     Extern(jsFunction.call(args.map(toJSValue)))
+                // } else {
+                //     throw ExternDynamicException("Expected function or class, got ${jsValue.typeof().toString()}")
+                // }
+            case _ => throw Exception("Not supposed to happen!")
         }
     }
 
     public static func evalAssignment  (e: Extern<ArkTSRuntime>, field: String, value: Any): Unit {
-        let jsValue = (e.content as JSValue).getOrThrow()
-        throw ExternDynamicException("")
+        match((e.content as JSValue).getOrThrow().asObject()) {
+            case jsObject: JSObject =>
+                jsObject.setProperty(field, toJSValue(value))
+            case _ => throw ExternDynamicException("Unsupported assignment!")
+        }
     }
 
     public static func evalIndexAccess (e: Extern<ArkTSRuntime>, arg: Any): Extern<ArkTSRuntime> {

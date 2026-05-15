@@ -19,6 +19,8 @@ func mytest(context: JSContext) {
     // ---- my_arkts_function ----
     arktsModule["my_arkts_function"].asFunction().call()
 
+    arktsModule["my_arkts_function"].asFunction().call([], thisArg: arktsModule["my_arkts_function"])
+
     // ---- Lookup ----
     let lat = context.number(42.4242).toJSValue()
     let long = context.number(1.111).toJSValue()

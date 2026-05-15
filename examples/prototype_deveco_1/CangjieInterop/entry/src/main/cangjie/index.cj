@@ -89,30 +89,46 @@ func testArkTS() {
     // let rectangleWidth: Extern<ArkTSRuntime> = rectangleObject.getWidth()
     // ->
     let rectangleWidthMethod: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject, "getWidth")
-//    let rectangleWidthResult: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(rectangleWidthMethod, [])
-//    mylog("Rectangle width: ${ArkTSRuntime.fromExtern<Float64>(rectangleWidthResult)}")
+    let rectangleWidthResult: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(rectangleWidthMethod, [])
+    mylog("Rectangle width: ${ArkTSRuntime.fromExtern<Float64>(rectangleWidthResult)}")
 
-    // let rectangleWidth = rectangleObject.callMethod("getWidth", []).asNumber().toFloat64()
-    // mylog("Rectangle width: ${rectangleWidth}")
-    // let rectangleHeight = rectangleObject.callMethod("getHeight", []).asNumber().toFloat64()
-    // mylog("Rectangle height: ${rectangleHeight}")
+    // let rectangleHeight: Extern<ArkTSRuntime> = rectangleObject.getHeight()
+    // ->
+    let rectangleHeightMethod: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject, "getHeight")
+    let rectangleHeightResult: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(rectangleHeightMethod, [])
+    mylog("Rectangle height: ${ArkTSRuntime.fromExtern<Float64>(rectangleHeightResult)}")
 
-    // // ---- createRectangle ----
-    // let widthJSValue2 = context.number(12).toJSValue()
-    // let heightJSValue2 = context.number(13).toJSValue()
-    // let rectangleJSValue2 = arktsModule["createRectangle"].asFunction().call()
-    // let rectangleObject2 = rectangleJSValue2.asObject()
+    // ---- createRectangle ----
 
-    // rectangleObject2.setProperty("width", context.number(42).toJSValue())
+    // let rectangleObject2: Extern<ArkTSRuntime> = arktsModule.createRectangle()
+    // ->
+    let createRectangleMethod: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(arktsModule, "createRectangle")
+    let rectangleObject2: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(createRectangleMethod, [])
 
-    // let rectangleWidth2 = rectangleObject2.getProperty("width").asNumber().toFloat64()
-    // mylog("Rectangle width: ${rectangleWidth2}")
-    // let rectangleHeight2 = rectangleObject2.getProperty("height").asNumber().toFloat64()
-    // mylog("Rectangle height: ${rectangleHeight2}")
+    // rectangleObject2.width = 42
+    // ->
+    ArkTSRuntime.evalAssignment(rectangleObject2, "width", 42.0)
 
-    // let area = rectangleObject2.callMethod("area", []).asNumber().toFloat64()
-    // mylog("Rectangle area: ${area}")
-    // let perimeter = rectangleObject2.callMethod("perimeter", []).asNumber().toFloat64()
-    // mylog("Rectangle perimeter: ${perimeter}")
+    // let rectangleWidth2: Extern<ArkTSRuntime> = rectangleObject2.width
+    // ->
+    let rectangleWidthResult2: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject2, "width")
+    mylog("Rectangle width: ${ArkTSRuntime.fromExtern<Float64>(rectangleWidthResult2)}")
+
+    // let rectangleHeight2: Extern<ArkTSRuntime> = rectangleObject2.height
+    // ->
+    let rectangleHeightResult2: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject2, "height")
+    mylog("Rectangle height: ${ArkTSRuntime.fromExtern<Float64>(rectangleHeightResult2)}")
+
+    // let area = rectangleObject2.area()
+    // ->
+    let areaMethod: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject2, "area")
+    let areaResult: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(areaMethod, [])
+    mylog("Rectangle area: ${ArkTSRuntime.fromExtern<Float64>(areaResult)}")
+
+    // let perimeter = rectangleObject2.perimeter()
+    // ->
+    let perimeterMethod: Extern<ArkTSRuntime> = ArkTSRuntime.evalMemberAccess(rectangleObject2, "perimeter")
+    let perimeterResult: Extern<ArkTSRuntime> = ArkTSRuntime.evalFunctionCall(perimeterMethod, [])
+    mylog("Rectangle perimeter: ${ArkTSRuntime.fromExtern<Float64>(perimeterResult)}")
 
 }
