@@ -1,6 +1,6 @@
 package ohos_app_cangjie_entry.DemoArkTSRuntime
 
-import ohos_app_cangjie_entry.Extern.mylog
+import ohos_app_cangjie_entry.Utils.mylog
 import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import ohos_app_cangjie_entry.Extern.Extern
 

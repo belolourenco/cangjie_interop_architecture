@@ -7,7 +7,7 @@ import ohos.ark_interop.JSObject
 import ohos.ark_interop.JSArray
 import ohos.ark_interop.JSString
 import ohos.ark_interop.JSNumber
-import ohos_app_cangjie_entry.Extern.mylog
+import ohos_app_cangjie_entry.Utils.mylog
 
 public func demoArkTSNativeInterop(context: JSContext) {
 

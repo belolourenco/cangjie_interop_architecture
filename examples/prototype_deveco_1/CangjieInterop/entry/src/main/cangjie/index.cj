@@ -1,6 +1,6 @@
 package ohos_app_cangjie_entry
 
-import ohos_app_cangjie_entry.Extern.{mylog, printStackTrace}
+import ohos_app_cangjie_entry.Utils.{mylog, printStackTrace}
 import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import ohos_app_cangjie_entry.DemoNativeInterop.demoArkTSNativeInterop
 import ohos_app_cangjie_entry.DemoDummyRuntime.dummyRuntimeDemo
@@ -38,7 +38,7 @@ func testCJ(runtime: JSContext, callInfo: JSCallInfo): JSValue {
         // - Adjust demoArkTSRuntime_2.cj accordingly
 
         mylog("######################### ArkTS Runtime Demo 2 #########################")
-        demoArkTSRuntime_2()
+//        demoArkTSRuntime_2()
 
 
     } catch (e: Exception) {

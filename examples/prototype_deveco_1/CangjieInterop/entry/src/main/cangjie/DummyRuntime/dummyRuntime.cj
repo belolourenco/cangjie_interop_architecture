@@ -1,6 +1,7 @@
 package ohos_app_cangjie_entry.DummyRuntime
 
 import ohos_app_cangjie_entry.Extern.*
+import ohos_app_cangjie_entry.Utils.mylog
 import std.collection.ArrayList
 
 abstract public class DummyRuntime <: Runtime<DummyRuntime> {

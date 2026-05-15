@@ -1,6 +1,7 @@
 package ohos_app_cangjie_entry.DemoArkTSRuntime
 
 import ohos_app_cangjie_entry.Extern.*
+import ohos_app_cangjie_entry.Utils.mylog
 import ohos_app_cangjie_entry.ArkTSRuntime.*
 
 func lookup(lat: Float32, long: Float32): Extern<ArkTSRuntime> {

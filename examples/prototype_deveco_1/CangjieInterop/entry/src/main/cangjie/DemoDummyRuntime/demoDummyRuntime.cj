@@ -1,6 +1,7 @@
 package ohos_app_cangjie_entry.DemoDummyRuntime
 
 import ohos_app_cangjie_entry.Extern.*
+import ohos_app_cangjie_entry.Utils.mylog
 import ohos_app_cangjie_entry.DummyRuntime.*
 
 func lookup(lat: Float32, long: Float32): Extern<DummyRuntime> {
