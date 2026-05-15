@@ -9,9 +9,7 @@ import ohos.ark_interop.JSString
 import ohos.ark_interop.JSNumber
 import ohos_app_cangjie_entry.Extern.mylog
 
-func mytest(context: JSContext) {
-//    let jsRuntime = JSRuntime()
-//    let context2 = jsRuntime.mainContext
+func demoArkTSNativeInterop(context: JSContext) {
 
     // ---- ArkTS Module ----
     let arktsModule = context.requireArkModule("entry/src/main/ets/my_arkts_module").asObject()

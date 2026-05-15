@@ -117,7 +117,7 @@ class Rectangle {
 
 }
 
-func dummyRuntimeDemoEntryPoint() {
+func dummyRuntimeDemo() {
     // ---- Int64 ----
 
     // let arkTs_fourty_two : Extern<DummyRuntime> = 42

@@ -6,7 +6,7 @@ import ohos_app_cangjie_entry.Extern.mylog
 import std.math.numeric.BigInt
 
 
-func arkTSRuntimePrimitiveTypesTestsEntryPoint() {
+func demoArkTSRuntimeTestPrimitives() {
     testBool()
     testString()
     testInt8()

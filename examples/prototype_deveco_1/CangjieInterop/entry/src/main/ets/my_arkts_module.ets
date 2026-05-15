@@ -124,8 +124,3 @@ export function createRectangle(): Rectangle {
   let height = 13
   return new Rectangle(width, height);
 }
-
-// Calculate and print area and perimeter
-hilog.info(0, "MYLOG", `Circle - Area: ${circle.area()}, Perimeter: ${circle.perimeter()}`);
-hilog.info(0, "MYLOG", `Rectangle - Area: ${rectangle.area()}, Perimeter: ${rectangle.perimeter()}`);
-hilog.info(0, "MYLOG", `Triangle - Area: ${triangle.area()}, Perimeter: ${triangle.perimeter()}`);
