@@ -1,6 +1,10 @@
 package ohos_app_cangjie_entry
 
-import ohos_app_cangjie_entry.Extern.*
+import ohos_app_cangjie_entry.Extern.{mylog, printStackTrace}
+import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
+import ohos_app_cangjie_entry.DemoNativeInterop.demoArkTSNativeInterop
+import ohos_app_cangjie_entry.DemoDummyRuntime.dummyRuntimeDemo
+import ohos_app_cangjie_entry.DemoArkTSRuntime.{demoArkTSRuntimeTestPrimitives, demoArkTSRuntime_1, demoArkTSRuntime_2}
 
 import std.collection.ArrayList
 
@@ -8,17 +12,9 @@ import ohos.ark_interop.JSModule
 import ohos.ark_interop.JSContext
 import ohos.ark_interop.JSCallInfo
 import ohos.ark_interop.JSValue
-import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import std.math.numeric.BigInt
 import ohos.ark_interop.JSRuntime
 import ohos.arkui.state_management.AppStorage
-
-class Assert {
-    public static func isUnreachable(reason!: String = "") {
-        mylog("unreachable, ${reason}")
-        throw Exception()
-    }
-}
 
 func testCJ(runtime: JSContext, callInfo: JSCallInfo): JSValue {
     try {
@@ -37,7 +33,14 @@ func testCJ(runtime: JSContext, callInfo: JSCallInfo): JSValue {
         mylog("######################### ArkTS Runtime Demo 1 #########################")
         demoArkTSRuntime_1()
 
-        
+        // TODO: Need to fix entry/src/main/cangjie/DemoArkTSRuntime/demoArkTSRuntime_2.cj. In particular:
+        // - Make Shapes in entry/src/main/ets/my_arkts_module.ets more similar to those in entry/src/main/ets/my_arkts_module.ets
+        // - Adjust demoArkTSRuntime_2.cj accordingly
+
+        mylog("######################### ArkTS Runtime Demo 2 #########################")
+        demoArkTSRuntime_2()
+
+
     } catch (e: Exception) {
         mylog(printStackTrace(e))
     }

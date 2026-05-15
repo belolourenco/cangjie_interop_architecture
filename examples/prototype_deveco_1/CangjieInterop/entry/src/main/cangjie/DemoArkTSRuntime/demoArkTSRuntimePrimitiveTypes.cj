@@ -1,12 +1,11 @@
-package ohos_app_cangjie_entry
+package ohos_app_cangjie_entry.DemoArkTSRuntime
 
 import ohos_app_cangjie_entry.Extern.Extern
 import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import ohos_app_cangjie_entry.Extern.mylog
 import std.math.numeric.BigInt
 
-
-func demoArkTSRuntimeTestPrimitives() {
+public func demoArkTSRuntimeTestPrimitives() {
     testBool()
     testString()
     testInt8()
@@ -108,8 +107,8 @@ func testInt32() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_int32)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int8: expected overflow")
     }
 
@@ -117,8 +116,8 @@ func testInt32() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_int32)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int16: expected overflow")
     }
 
@@ -164,8 +163,8 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_int64)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int8: expected overflow")
     }
 
@@ -173,8 +172,8 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_int64)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int16: expected overflow")
     }
 
@@ -182,8 +181,8 @@ func testInt64() {
     // ->
     try {
         let fourty_two_int32 : Int32 = ArkTSRuntime.fromExtern<Int32>(arkTs_fourty_two_from_int64)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int32: expected overflow")
     }
 
@@ -224,8 +223,8 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int8 : Int8 = ArkTSRuntime.fromExtern<Int8>(arkTs_fourty_two_from_bigInt)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int8: expected overflow")
     }
 
@@ -233,8 +232,8 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int16 : Int16 = ArkTSRuntime.fromExtern<Int16>(arkTs_fourty_two_from_bigInt)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int16: expected overflow")
     }
 
@@ -242,8 +241,8 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int32 : Int32 = ArkTSRuntime.fromExtern<Int32>(arkTs_fourty_two_from_bigInt)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int32: expected overflow")
     }
 
@@ -251,8 +250,8 @@ func testBigInt() {
     // ->
     try {
         let fourty_two_int64 : Int64 = ArkTSRuntime.fromExtern<Int64>(arkTs_fourty_two_from_bigInt)
-        Assert.isUnreachable()
-    } catch (e: Exception) {
+        throw Exception("Should not happen!")
+    } catch (e: OverflowException) {
         mylog("Int64: expected overflow")
     }
 

@@ -51,6 +51,38 @@ private func js2cangjie<T>(value: JSValue, cjType: Option<T>) {
                 let bigint = value.toBigInt().toInt64()
                 return (bigint as T).getOrThrow()
             }
+        case _: Option<UInt8> =>
+            if (value.isNumber()) {
+                let number = value.toNumber()
+                return (UInt8(number) as T).getOrThrow()
+            } else if (value.isBigInt()) {
+                let bigint = value.toBigInt().toUInt8()
+                return (bigint as T).getOrThrow()
+            }
+        case _: Option<UInt16> =>
+            if (value.isNumber()) {
+                let number = value.toNumber()
+                return (UInt16(number) as T).getOrThrow()
+            } else if (value.isBigInt()) {
+                let bigint = value.toBigInt().toUInt16()
+                return (bigint as T).getOrThrow()
+            }
+        case _: Option<UInt32> =>
+            if (value.isNumber()) {
+                let number = value.toNumber()
+                return (UInt32(number) as T).getOrThrow()
+            } else if (value.isBigInt()) {
+                let bigint = value.toBigInt().toUInt32()
+                return (bigint as T).getOrThrow()
+            }
+        case _: Option<UInt64> =>
+            if (value.isNumber()) {
+                let number = value.toNumber()
+                return (UInt64(number) as T).getOrThrow()
+            } else if (value.isBigInt()) {
+                let bigint = value.toBigInt().toUInt64()
+                return (bigint as T).getOrThrow()
+            }
         case _: Option<BigInt> =>
             if (value.isNumber()) {
                 let number = value.toNumber()
@@ -107,6 +139,14 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
                 context.number(i).toJSValue()
             case i: Int64 =>
                 context.bigint(i).toJSValue()
+            case i: UInt8 =>
+                context.number(Int32(i)).toJSValue()
+            case i: UInt16 =>
+                context.number(Int32(i)).toJSValue()
+            case i: UInt32 =>
+                context.bigint(Int64(i)).toJSValue()
+            case i: UInt64 =>
+                context.bigint(BigInt(i)).toJSValue()
             case i: BigInt =>
                 context.bigint(i).toJSValue()
             case f: Float16 =>

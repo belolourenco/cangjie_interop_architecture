@@ -1,4 +1,4 @@
-package ohos_app_cangjie_entry
+package ohos_app_cangjie_entry.DemoNativeInterop
 
 import ohos.ark_interop.JSContext
 import ohos.ark_interop.JSRuntime
@@ -9,7 +9,7 @@ import ohos.ark_interop.JSString
 import ohos.ark_interop.JSNumber
 import ohos_app_cangjie_entry.Extern.mylog
 
-func demoArkTSNativeInterop(context: JSContext) {
+public func demoArkTSNativeInterop(context: JSContext) {
 
     // ---- ArkTS Module ----
     let arktsModule = context.requireArkModule("entry/src/main/ets/my_arkts_module").asObject()

@@ -1,10 +1,10 @@
-package ohos_app_cangjie_entry
+package ohos_app_cangjie_entry.DemoArkTSRuntime
 
 import ohos_app_cangjie_entry.Extern.mylog
 import ohos_app_cangjie_entry.ArkTSRuntime.ArkTSRuntime
 import ohos_app_cangjie_entry.Extern.Extern
 
-func demoArkTSRuntime_1() {
+public func demoArkTSRuntime_1() {
     // ---- ArkTS Module ----
     let arktsModule: Extern<ArkTSRuntime> = ArkTSRuntime.getModule("entry/src/main/ets/my_arkts_module")
 

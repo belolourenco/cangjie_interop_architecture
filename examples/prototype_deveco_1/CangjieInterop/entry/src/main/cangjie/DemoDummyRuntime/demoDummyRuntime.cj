@@ -1,4 +1,4 @@
-package ohos_app_cangjie_entry
+package ohos_app_cangjie_entry.DemoDummyRuntime
 
 import ohos_app_cangjie_entry.Extern.*
 import ohos_app_cangjie_entry.DummyRuntime.*
@@ -117,7 +117,7 @@ class Rectangle {
 
 }
 
-func dummyRuntimeDemo() {
+public func dummyRuntimeDemo() {
     // ---- Int64 ----
 
     // let arkTs_fourty_two : Extern<DummyRuntime> = 42
