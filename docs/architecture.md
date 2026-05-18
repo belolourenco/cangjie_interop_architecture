@@ -1,158 +1,193 @@
 # Architecture Document for the Cangjie Extern Type
 
-This document describes the interoperability architecture for the proposal linked [here](https://github.com/danghica/interop/blob/main/cangjie.md).
+This document describes the interoperability architecture for the proposal linked [here](https://github.com/danghica/interop/blob/main/The%20Cangjie%20Extern%20type.md).
 
 ## Overall Architecture
 
 ### What We Provide
 
-The following type can be defined in a library/package or provided as a compiler built-in. Note that `UInt64` is not fixed and needs to be decided later.
+The following types can be defined in a library/package or provided as a compiler built-in.
+
+#### `Runtime` interface
+
+`Runtime`, defined below, specifies the interface that language-specific interoperability providers must implement.
 
 ```cangjie
-type Handle = UInt64
-```
+public interface Runtime<T> where T <: Runtime<T> {
+    static func evalMemberAccess(e: Extern<T>, field: String)            : Extern<T>
+    static func evalFunctionCall(e: Extern<T>, args: Array<Any>)         : Extern<T>
+    static func evalIndexAccess (e: Extern<T>, arg: Any)                 : Extern<T>
+    static func evalAssignment  (e: Extern<T>, field: String, value: Any): Unit
 
-`ExternalVM`, defined below, specifies the interface that language-specific interoperability providers must implement.
-
-```cangjie
-interface ExternalVM {
-    func convert<T>(h: Handle) : T
-    func update<T>(h: Handle, value: T) : Unit
-    func create<T>(value: T) : Handle
-
-    func getGlobal(name: String) : Handle
-
-    func callMethod(h: Handle, name: String, args: Array<Any>) : Handle
-    func setField<T>(h: Handle, name: String, value: T) : Unit
-    func getField(h: Handle, name: String) : Handle
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
 }
 ```
 
-The `Extern` type shown below can be exposed in a library/package or provided as a compiler built-in type that has this as its representation.
+#### `Extern` type
+
+The `Extern` used above to represent interoperability language specific values can be defined in different ways.
+
+##### Option 1: struct with Handle of type `Int64`
+
+This is probably the most compact way.
 
 ```cangjie
-struct Extern {
-    let ctx : ExternalVM
-    let handle : Handle
+public struct Extern<T> where T <: Runtime<T> {
+    public Extern(public let content : Int64) { }
 }
 ```
 
-Summary:
-- `Handle` is exposed to the user or provided as a built-in
-- `ExternalVM` is exposed to the user
-- `Extern` is exposed to the user or provided as a built-in
+##### Option 2: struct with Handle of type `Any`
+
+This is more versatile than `Option 1` but still fixes the representation.
+
+```cangjie
+public struct Extern<T> where T <: Runtime<T> {
+    public Extern(public let content : Any) { }
+}
+```
+
+A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/Extern/extern.cj).
+
+##### Option 3: interface
+
+This is the most versatile way, it's totally up to the runtime implementer how to represent `Extern` values.
+
+```cangjie
+public interface Extern<T> where T <: Runtime<T> {}
+```
+
+A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/extern_interface/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/Extern/extern.cj).
 
 ### What a Language-Specific Interoperability Provider Writes
 
-To provide interoperability support for a new programming language, the implementer should provide a class that implements `ExternalVM`. Below is a minimal example for a hypothetical Python VM.
+To provide interoperability support for a new programming language, the implementer should provide a class that implements `Runtime<T>`. Below is a minimal example for a hypothetical Python Runtime.
 
 ```cangjie
-class PythonVM <: ExternalVM {
-    public init () { ... }
-    public func convert<T>(h: Handle) : T { ... }
-    public func update<T>(h: Handle, value: T) : Unit { ... }
-    public func create<T>(value: T) : Handle { ... }
+public class PythonRT <: Runtime<PythonRT> {
+    public static func evalMemberAccess(e: Extern<PythonRT>, field: String): Extern<PythonRT> { ... }
+    public static func evalFunctionCall(e: Extern<PythonRT>, args: Array<Any>): Extern<PythonRT> { ... }
+    public static func evalIndexAccess (e: Extern<PythonRT>, arg: Any): Extern<PythonRT> { ... }
+    public static func evalAssignment  (e: Extern<PythonRT>, field: String, value: Any): Unit { ... }
 
-    public func getGlobal(name: String) : Handle { ... }
-
-    public func callMethod(h: Handle, name: String, args: Array<Any>) : Handle { ... }
-    public func setField<T>(h: Handle, name: String, value: T) : Unit { ... }
-    public func getField(h: Handle, name: String) : Handle { ... }
+    public static func fromExtern<R>(h: Extern<PythonRT>): R { ... }
+    public static func toExtern<R>(v: R): Extern<PythonRT> { ... }
 }
 ```
 
-The interoperability provider is free to implement this in any way it chooses, as long as it satisfies `ExternalVM`.
+The interoperability provider is free to implement this in any way it chooses, as long as it implements `Runtime<Python>`.
+
+If we define `Extern` as in Option 3 above, we also need to define a type that implements `Extern<Runtime<T>>`. E.e. 
+
+```cangjie
+private struct PythonExtern <: Extern<PythonRT> {
+    ...
+    public PythonExtern(...) { ... }
+}
+```
+
+A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/extern_interface/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/ArkTSRuntime/arkTSRuntime.cj).
 
 ### What the User Writes
 
 Once `ExternalVM`s are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line should be interpreted.
 
 ```cangjie
-let vm = PythonVM()
+let x: Extern<PythonRT> = 42
+// => let x: Extern<PythonRT> = PythonRT.toExtern(42)
 
-func foo(x: Extern) {
+func foo(e1: Extern<PythonRT>) {
+    let s: String = e1
+    // => let s: String = PythonRT.fromExtern<String>(x)
 
-    let s: String = x
-    // => let s: String = x.ctx.convert<String>(x.handle)
+    let e2: Extern<PythonRT> = e1
+    // normal Cangjie semantics
 
-    x = "Hello"
-    // => x.ctx.update(x.handle, "Hello")
+    var e3: Extern<PythonRT>
+    e3 = e2
+    // normal Cangjie semantics
 }
 
-foo("world" @ vm)                 // example syntax
-// => foo(vm.create("world"))
+func bar(e1: Extern<PythonRT>, e2: Extern<PythonRT>) {
+    let x: Int64 = e1.a.b.c
+    // =>
+    // let x: Int64 =
+    // PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(
+    //      PythonRT.evalMemberAccess(e1, "a"), "b"), "c")
+
+    e1.a.b.c  = 101
+    // =>
+    // PythonRT.evalAssignment(PythonRt.evalMemberAccess(PythonRT.evalMemberAccess(e1, "a"), "b"), "c", 101)
+
+    e1.a = e2
+    // =>
+    // PythonRT.evalAssignment(e1, "a", e2)
+
+    e1.a.d[42]
+    // =>
+    // PythonRT.evalIndexAccess(PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(e1, "a"), "d"), 42)
+
+    let e2 = e1.x.y()
+    // =>
+    // let tmp = PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(e1, "x"), "y")
+    // let e2: Extern<PythonRT> = PythonRT.evalFunctionCall(tmp, [])
+
+    let e3 = e1.z(x, e2)
+    // =>
+    // let tmp2 = PythonRT.evalMemberAccess(e1, "z")
+    // let e3: Extern<PythonRT> = PytonRT.evalFunctionCall(tmp2, [x, e2])
+}
 ```
 
 ## Tasks
 
-1. Provide a library or add compiler built-in support for `Handle`, `Extern`, `ExternalVM`.
-    - This might require compiler support.
-2. Parsing (optional, if we want to support new syntax such as `"world" @ vm` or have `Extern` as a keyword) and type checking (e.g. `let s: String = x` should be accepted when `x: Extern`).
-    - This requires compiler support.
-3. Program transformations (e.g. `let s: String = x` => `let s: String = x.ctx.convert<String>(x.handle)`)
+1. Provide a library or add compiler built-in support for `Extern`, and `Runtime`.
+    - This might require compiler support is Extern is built-in.
+2. Program transformations (e.g. `let s: String = x` => `let s: String = PythonRT.fromExtern<String>(x)`)
     - This may be possible to implement with compiler/CHIR plugins.
-
-Additionally, we might want to provide a proof-of-concept implementation of `ExternalVM` for a specific programming language (e.g. ArkTS):
-
-4. Provide a proof-of-concept interoperability implementation for a specific programming language.
+4. Prototypes Runtimes implementations for specific programming languages:
+    - ArkTS (https://github.com/belolourenco/cangjie_interop_architecture/tree/main/examples/prototype_deveco_1/CangjieInterop)
+    - Lua
+    - Python
 
 
 ## WIP: Type Checking and Program transformations
 
-Let `e1, e2: Extern`, `PythonVM <: ExternalVM`.
+Let `e1, e2: Extern<T>`.
 
 The following expressions type-check and are transformed as indicated in the comments:
 
 ```cangjie
 let s: String = e1
-// => let s: String = e1.ctx.convert<String>(e1.handle)
+// => let s: String = T.fromExtern<String>(e1)
 
 var t: String = e1
-// => var t: String = e1.ctx.convert<String>(e1.handle)
+// => var t: String = T.fromExtern<String>(e1)
 
-e1 = "Hello"
-// => e1.ctx.update(e1.handle, "Hello")
+var e3 = e1
+e3 = e2
+// Type check ok, no transformations!
 
-e1 = e2
-// => if (refEq(e1.ctx, e2.ctx)) {
-//      e1.ctx.update(e1.handle, e2.handle)
-//    } else {
-//      throw InvalidAssignmentException
-//    }
-
-// Have `getGlobal` as a free function at the top level that wraps the result of `ExternalVM.getGlobal` in an `Extern`
-// func getGlobal<T: ExternalVM>(t: T, s: String): Extern { Extern(vm, vm.getGlobal("g")) }
-let vm = PythonVM()
-let g : (String) -> Extern = getGlobal(vm, "g")
-// => let tmp = getGlobal(vm, "g"); let g : (String) -> Extern = tmp.ctx.convert<(String) -> Extern>(tmp.handle)
-g("hello world")
+e3 = "Hello"
+// => e3 = T.toExtern("Hello)
 
 let x = e1.f1.f2.f3
-// => let x = e1.ctx.getField(e1.ctx.getField(e1.ctx.getField(e1.handle, "f1"), "f2"), "f3")
+// => let x = T.evalMemberAccess(T.evalMemberAccess(T.evalMemberAccess(e1, "r1"), "f2"), "f3")
+
+e1("hello world")
+// => T.evalFunctionCall(e1, ["hello world"])
 
 e1.f1.f2 = "boo"
-// => e1.ctx.update(e1.ctx.getField(e1.ctx.getField(e1.handle, "f1"), "f2"), "boo")
-// or,
-// => e1.ctx.setField(e1.ctx.getField(e1.handle, "f1"), "f2", "boo")
+// => T.evalAssignment(T.evalMemberAccess(e1, "f1"), "f2", "boo")
 
 let y = e1.foo("goo")
-// => e1.ctx.callMethod(e1.handle, "foo", ["goo"])
-```
+// => let y: Extern<T> = T.evalFunctionCall(T.evalMemberAccess(e1, "foo"), ["goo"])
 
-To be discussed: is `let x: Extern = ...` the same as `var x: Extern = ...`?
+e1.goo = 42
+// => T.evalAssignment(e1, "goo", 42)
 
-Type-checking OK/FAIL
+e1.goo[42]
+// => T.evalIndexAccess(T.evalMemberAccess(e1, "goo"), 42)
 
-```cangjie
-let f : Extern = getGlobal(vm, "f")     // OK
-f("hello world")                        // FAIL
-f(42)                                   // FAIL
-let f_s : (String) -> Extern = f        // OK
-// let f_s : (String) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
-f_s("hello world")                      // OK
-f_s(42)                                 // FAIL
-let f_i : (Int64) -> Extern = f         // OK
-// let f_i : (Int64) -> Extern = f.ctx.convert<(String) -> Extern>(f.handle)
-f_i("hello world")                      // FAIL
-f_i(42)                                 // OK
 ```
