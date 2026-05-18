@@ -22,6 +22,4 @@ public interface Runtime<T> where T <: Runtime<T> {
     static func toExtern<R>(v: R): Extern<T>
 }
 
-public struct Extern<T> where T <: Runtime<T> {
-    public Extern(public let content : Any) { }
-}
+public interface Extern<T> where T <: Runtime<T> {}

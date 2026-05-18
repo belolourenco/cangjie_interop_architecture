@@ -120,6 +120,10 @@ private func js2cangjie<T>(value: JSValue, cjType: Option<T>) {
     throw ExternConversionException("Unsupported type conversion by ArkTSRuntime")
 }
 
+private struct ArkTSExtern <: Extern<ArkTSRuntime> {
+    public ArkTSExtern(public let content : Any) { }
+}
+
 abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
 
     private static let jsRuntime = JSRuntime()
@@ -127,7 +131,7 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
 
     private static func toJSValue(v: Any): JSValue {
         match(v) {
-            case e: Extern<ArkTSRuntime> =>
+            case e: ArkTSExtern =>
                 (e.content as JSValue).getOrThrow()
             case jsValue: JSValue =>
                 jsValue
@@ -164,36 +168,44 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
     }
 
     public static func evalMemberAccess(e: Extern<ArkTSRuntime>, field: String): Extern<ArkTSRuntime> {
-        match(e.content) {
+        let arkTSExtern = match(e) {
+            case arkTSExtern: ArkTSExtern => arkTSExtern
+            case _ => throw ExternDynamicException("Unsupported Extern type by ArkTSRuntime")
+        }
+        match(arkTSExtern.content) {
             case jsValue: JSValue =>
                 let fieldValue = jsValue.asObject()[field]
                 if (fieldValue.isFunction() && !fieldValue.isClass()) {
-                    Extern((fieldValue.asFunction(), jsValue))
+                    ArkTSExtern((fieldValue.asFunction(), jsValue))
                 } else {
-                    Extern(fieldValue)
+                    ArkTSExtern(fieldValue)
                 }
             case _ => throw Exception("Not supposed to happen!")
         }
     }
 
     public static func evalFunctionCall(e: Extern<ArkTSRuntime>, args: Array<Any>): Extern<ArkTSRuntime> {
-        match(e.content) {
+        let arkTSExtern = match(e) {
+            case arkTSExtern: ArkTSExtern => arkTSExtern
+            case _ => throw ExternDynamicException("Unsupported Extern type by ArkTSRuntime")
+        }
+        match(arkTSExtern.content) {
             case methodAndThis: (JSFunction, JSValue) =>
                 let result = methodAndThis[0].call(args.map(toJSValue), thisArg: methodAndThis[1])
-                Extern(result)
+                ArkTSExtern(result)
             case jsValue: JSValue =>
                 // if (jsValue.isClass()) {
                     // I don't understand why this works, but it does!
                     let jsClass = jsValue.asClass()
-                    Extern(jsClass.new(args.map(toJSValue)))
+                    ArkTSExtern(jsClass.new(args.map(toJSValue)))
                 // } else if (jsValue.isObject()) {
                 //     mylog("HMM, here is an object")
                 //     let jsObject = jsValue.asFunction()
-                //     Extern(jsObject.call(args.map(toJSValue)))
+                //     ArkTSExtern(jsObject.call(args.map(toJSValue)))
                 // } else if (jsValue.isFunction()) {
                 //     mylog("HMM, here is a function")
                 //     let jsFunction = jsValue.asFunction()
-                //     Extern(jsFunction.call(args.map(toJSValue)))
+                //     ArkTSExtern(jsFunction.call(args.map(toJSValue)))
                 // } else {
                 //     throw ExternDynamicException("Expected function or class, got ${jsValue.typeof().toString()}")
                 // }
@@ -202,7 +214,11 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
     }
 
     public static func evalAssignment  (e: Extern<ArkTSRuntime>, field: String, value: Any): Unit {
-        match((e.content as JSValue).getOrThrow().asObject()) {
+        let arkTSExtern = match(e) {
+            case arkTSExtern: ArkTSExtern => arkTSExtern
+            case _ => throw ExternDynamicException("Unsupported Extern type by ArkTSRuntime")
+        }
+        match((arkTSExtern.content as JSValue).getOrThrow().asObject()) {
             case jsObject: JSObject =>
                 jsObject.setProperty(field, toJSValue(value))
             case _ => throw ExternDynamicException("Unsupported assignment!")
@@ -210,23 +226,31 @@ abstract public class ArkTSRuntime <: Runtime<ArkTSRuntime> {
     }
 
     public static func evalIndexAccess (e: Extern<ArkTSRuntime>, arg: Any): Extern<ArkTSRuntime> {
-        let array = (e.content as JSValue).getOrThrow().asArray()
+        let arkTSExtern = match(e) {
+            case arkTSExtern: ArkTSExtern => arkTSExtern
+            case _ => throw ExternDynamicException("Unsupported Extern type by ArkTSRuntime")
+        }
+        let array = (arkTSExtern.content as JSValue).getOrThrow().asArray()
         // TODO: deal with non Int arguments?!?!! Not sure if this or just change the argument type to Int64?
-        Extern(array[(arg as Int64).getOrThrow()])
+        ArkTSExtern(array[(arg as Int64).getOrThrow()])
     }
 
     public static func getModule(moduleName: String): Extern<ArkTSRuntime> {
         let module = context.requireArkModule(moduleName)
-        Extern<ArkTSRuntime>(module)
+        ArkTSExtern(module)
     }
 
     public static func fromExtern<T>(e: Extern<ArkTSRuntime>): T {
         let dummy : Option<T> = None
-        let value = (e.content as JSValue).getOrThrow()
+        let arkTSExtern = match(e) {
+            case arkTSExtern: ArkTSExtern => arkTSExtern
+            case _ => throw ExternDynamicException("Unsupported Extern type by ArkTSRuntime")
+        }
+        let value = (arkTSExtern.content as JSValue).getOrThrow()
         js2cangjie(value, dummy)
     }
 
     public static func toExtern<T>(v: T): Extern<ArkTSRuntime> {
-        Extern(toJSValue(v))
+        ArkTSExtern(toJSValue(v))
     }
 }

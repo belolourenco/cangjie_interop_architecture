@@ -4,6 +4,10 @@ import ohos_app_cangjie_entry.Extern.*
 import ohos_app_cangjie_entry.Utils.mylog
 import std.collection.ArrayList
 
+private struct DummyExtern <: Extern<DummyRuntime> {
+    public DummyExtern(public let content : Any) { }
+}
+
 abstract public class DummyRuntime <: Runtime<DummyRuntime> {
 
     private static func lookup_impl(lat: Extern<DummyRuntime>, long: Extern<DummyRuntime>): Extern<DummyRuntime> {
@@ -46,14 +50,14 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
 
     static public func getModule(moduleName: String): Extern<DummyRuntime> {
         match (moduleName) {
-            case "geocoding" => Extern(geocodingModule)
-            case "shape" => Extern(shapeModule)
+            case "geocoding" => DummyExtern(geocodingModule)
+            case "shape" => DummyExtern(shapeModule)
             case _ => throw ExternDynamicException("Module not found: ${moduleName}")
         }
     }
 
     public static func evalFunctionCall(e: Extern<DummyRuntime>, args: Array<Any>): Extern<DummyRuntime> {
-        match (e.content) {
+        match ((e as DummyExtern).getOrThrow().content) {
             case function: () -> Extern<DummyRuntime> => function()
             case function: (Extern<DummyRuntime>) -> Extern<DummyRuntime> => function((args[0] as Extern<DummyRuntime>).getOrThrow())
             case function: (Extern<DummyRuntime>, Extern<DummyRuntime>) -> Extern<DummyRuntime> => function((args[0] as Extern<DummyRuntime>).getOrThrow(), (args[1] as Extern<DummyRuntime>).getOrThrow())
@@ -66,7 +70,7 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func evalMemberAccess(e: Extern<DummyRuntime>, field: String): Extern<DummyRuntime> {
-        match (e.content) {
+        match ((e as DummyExtern).getOrThrow().content) {
             case point: Point =>
                 match (field) {
                     case "x" => return toExtern(point.x)
@@ -85,7 +89,7 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func evalAssignment(e: Extern<DummyRuntime>, field: String, value: Any): Unit {
-        match (e.content) {
+        match ((e as DummyExtern).getOrThrow().content) {
             case point: Point =>
                 match (field) {
                     case "x" =>
@@ -107,10 +111,10 @@ abstract public class DummyRuntime <: Runtime<DummyRuntime> {
     }
 
     public static func fromExtern<T>(e: Extern<DummyRuntime>): T {
-        (e.content as T).getOrThrow()
+        ((e as DummyExtern).getOrThrow().content as T).getOrThrow()
     }
 
     public static func toExtern<T>(v: T): Extern<DummyRuntime> {
-        Extern(v)
+        DummyExtern(v)
     }
 }
