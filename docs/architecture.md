@@ -92,7 +92,7 @@ public class ExternConversionException <: Exception {
 
 ### Changes to the compiler
 
-The compiler needs to be modified to support the new forced cast (e.g. `(Int64)e`), the intrinsic function `getPayload`, the type checking of `Extern` expressions (e.g. `let e: Extern<ArkTS> = 42` should type check) and the program transformations (e.g. `let e: Extern<ArkTS> = 42` should be transformed to `let e: Extern<ArkTS> = ArkTS.toExtern(42)`).
+The compiler needs to be modified to support the new forced cast, the intrinsic function `getPayload`, the type checking of `Extern` expressions and the program transformations.
 
 #### Forced cast
 
