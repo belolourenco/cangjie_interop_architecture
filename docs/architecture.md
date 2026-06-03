@@ -251,6 +251,41 @@ func bar(e1: Extern<PythonRT>, e2: Extern<PythonRT>) {
 }
 ```
 
+## Implementation
+
+The implementation of the extern runtime support is in [https://github.com/belolourenco/cangjie_sdk.git](https://github.com/belolourenco/cangjie_sdk.git).
+
+To build the SDK make sure you install the dependencies as in [here](https://gitcode.com/Cangjie/cangjie_build/blob/dev/doc_en/macos.md), and then if you are in macOS run:
+
+```bash
+$ export ARCH=aarch64
+$ export CELLAR_PATH=/opt/homebrew/Cellar                  # adjust this to your system
+$ $t PATH=$CELLAR_PATH/llvm@16/16.0.6_1/bin/:$PATH     # adjust this to your system
+$ $t OPENSSL_PATH=$CELLAR_PATH/openssl@3/3.6.2/lib     # adjust this to your system
+$ $t LD_LIBRARY_PATH=$OPENSSL_PATH:$LD_LIBRARY_PATH
+$ $t DYLD_LIBRARY_PATH=$OPENSSL_PATH
+
+$ git clone https://github.com/belolourenco/cangjie_sdk.git -b feature_extern
+$ cd cangjie_sdk
+$ git submodule update --init
+$ bash ./build_scripts/macos/all.sh --bundle-with-links
+$ source software/cangjie/envsetup.sh
+```
+
+After the commands above, the following command should work and output the `cjc` and `cjpm` versions:
+
+```bash
+$ cjc --version
+$ cjpm --version
+```
+
+
+The tests for the project are in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/extern1.cj`. To run the tests, run:
+
+```bash
+$ python3 cangjie_test_framework/main.py --test_cfg=cangjie_test/testsuites/LLT/configs/cjnative/cjnative_test.cfg -pFAIL -j20 --test_list=cangjie_test/testsuites/LLT/extern_testlist cangjie_test/testsuites/LLT/
+```
+
 ------------------------------------------------------------------------------------------------
 
 # WIP: old stuff!
