@@ -4,9 +4,9 @@ This document describes the interoperability architecture for the proposal linke
 
 ## Overall Architecture
 
-### What We Provide
+### Changes to `std.core`
 
-The following types can be defined in a library/package or provided as a compiler built-in.
+The following types are to be defined in a new file `extern_runtime.cj` to be part of the `std.core` library.
 
 #### `Runtime` interface
 
@@ -14,10 +14,12 @@ The following types can be defined in a library/package or provided as a compile
 
 ```cangjie
 public interface Runtime<T> where T <: Runtime<T> {
-    static func evalMemberAccess(e: Extern<T>, field: String)            : Extern<T>
-    static func evalFunctionCall(e: Extern<T>, args: Array<Any>)         : Extern<T>
-    static func evalIndexAccess (e: Extern<T>, arg: Any)                 : Extern<T>
-    static func evalAssignment  (e: Extern<T>, field: String, value: Any): Unit
+    static func memberAccess(e: Extern<T>, field: String)              : Extern<T>
+    static func functionCall(e: Extern<T>, args: Array<Any>)           : Extern<T>
+    static func indexAccess (e: Extern<T>, index: Any)                 : Extern<T>
+
+    static func memberUpdate(e: Extern<T>, field: String, value: Any)  : Unit
+    static func indexAccessUpdate(e: Extern<T>, index: Any, value: Any): Unit
 
     static func fromExtern<R>(h: Extern<T>): R
     static func toExtern<R>(v: R): Extern<T>
@@ -26,39 +28,152 @@ public interface Runtime<T> where T <: Runtime<T> {
 
 #### `Extern` type
 
-The `Extern` used above to represent interoperability language specific values can be defined in different ways.
-
-##### Option 1: struct with Handle of type `Int64`
-
-This is probably the most compact way.
+`Extern<T>`, defined below, is a wrapper around the value the Runtime<T> implementer wants to use as a handle for the foreign runtime.
 
 ```cangjie
 public struct Extern<T> where T <: Runtime<T> {
-    public Extern(public let content : Int64) { }
+    public let payload : Any
+    public Extern(payload: Any) {
+        this.payload = payload
+    }
+}
+
+@Intrinsic
+public func getPayload<T>(e: Extern<T>): Any where T<: Runtime<T>
+```
+
+The intrinsic function `getPayload` returns the payload of the `Extern` value. It's implementation is defined within the compiler and can be seen as `return e.payload`. It is used to disambiguate the dynamic field access of the form `e.payload`, for some `e: Extern<T>`.
+
+#### Predefined Exceptions
+
+```cangjie
+// MemberAccessException thrown if an attempt is made to access or update a non-existing member
+public class MemberAccessException <: Exception {
+    public ExternDynamicException(message: String) {
+        super(message)
+    }
+}
+
+// FunctionAccessException thrown if an attempt is made to access a non-existing function
+public class FunctionAccessException <: Exception {
+    public FunctionAccessException(message: String) {
+        super(message)
+    }
+}
+
+// FunctionCallException thrown if an attempt is made to call a function with the wrong arguments
+public class FunctionCallException <: Exception {
+    public FunctionCallException(message: String) {
+        super(message)
+    }
+}
+
+// IndexAccessException thrown if an attempt is made to access or update with the wrong index, including out-of-bounds errors
+public class IndexAccessException <: Exception {
+    public IndexAccessException(message: String) {
+        super(message)
+    }
+}
+
+// ExternDynamicException thrown if a function in the foreign runtime throws a runtime exception
+public class ExternDynamicException <: Exception {
+    public ExternDynamicException(message: String) {
+        super(message)
+    }
+}
+
+// ExternConversionException thrown if data cannot be converted to or from an Extern type as required.
+public class ExternConversionException <: Exception {
+    public ExternConversionException(message: String) {
+        super(message)
+    }
 }
 ```
 
-##### Option 2: struct with Handle of type `Any`
+### Changes to the compiler
 
-This is more versatile than `Option 1` but still fixes the representation.
+The compiler needs to be modified to support the new forced cast (e.g. `(Int64)e`), the intrinsic function `getPayload`, the type checking of `Extern` expressions (e.g. `let e: Extern<ArkTS> = 42` should type check) and the program transformations (e.g. `let e: Extern<ArkTS> = 42` should be transformed to `let e: Extern<ArkTS> = ArkTS.toExtern(42)`).
+
+#### Forced cast
+
+The forced cast `(T)e` is a new feature that allows the user to convert an `Extern<T>` value to a specific type `T`. It is desugared to `T.fromExtern<T>(e)`.
+
+Parsing support for the forced cast should be added to the compiler taking into account the parsing disambiguation discussed in [here](https://titanium.cs.berkeley.edu/doc/java-langspec-1.0/19.doc.html#44559).
+
+The compiler should also perform type checking on the forced cast, but we defer the details to the type checker section below.
+
+#### New intrinsic function `getPayload`
+
+The intrinsic function `getPayload` is a new feature that allows the user to get the payload of an `Extern<T>` value. 
+
+It is implemented internally in the compiler as:
 
 ```cangjie
-public struct Extern<T> where T <: Runtime<T> {
-    public Extern(public let content : Any) { }
+public func getPayload<T>(e: Extern<T>): Any where T<: Runtime<T> {
+    return e.payload
 }
 ```
 
-A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/Extern/extern.cj).
+#### Type checking
 
-##### Option 3: interface
+##### Type checking of `(U)e`
 
-This is the most versatile way, it's totally up to the runtime implementer how to represent `Extern` values.
+The type checking of `(U)e` should be performed as follows:
 
-```cangjie
-public interface Extern<T> where T <: Runtime<T> {}
-```
+1. If type of `e` is `Extern<T>` for some `T`, then succeed!
+3. If type if `e` is not `Extern<T>` for some `T`, then fail!
 
-A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/extern_interface/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/Extern/extern.cj).
+##### Type checking when `Extern<T>` is expected
+
+The type checking of `e` when `Extern<T>` is expected should always succeed no matter the type of `e`.
+
+> *Intuition*: if `e` is of type `U` with `U != T`, then `e` should be desugared to `Extern<T>` using `T.toExtern<U>(e)`.
+
+##### Type checking of `e.f`, `e[i]`, `e(e1, ..., en)`
+
+The type of `e.f`, `e[i]`, `e(e1, ..., en)` when `e` is of type `Extern<T>` is `Extern<T>`.
+
+No check needs to be performed on the type of `f`, `i`, `e1`, ..., `en`.
+
+##### Type checking of `e.f = e1`, `e[i] = e2`
+
+The type of `e.f = e1`, `e[i] = e2` when `e` is of type `Extern<T>` is `Unit`.
+
+No check needs to be performed on the type of `e1`, `e2`.
+
+##### Type checking of `e.f = e1`, `e[i] = e2`
+
+The type of `e.f = e1`, `e[i] = e2` when `e` is of type `Extern<T>` is `Unit`.
+
+No check needs to be performed on the type of `e1`, `e2`.
+
+#### Program transformations
+
+##### Desugaring of `(U)e`
+
+If `(U)e` has type `Extern<T>` for some `T`, then desugar to `T.fromExtern<U>(e)`.
+
+##### Desugaring of `e` when `Extern<T>` is expected
+
+If `e` is of type `U` with `U != T`, then desugar to `T.toExtern<U>(e)`.
+
+##### Desugaring of `e.f`, `e[i]`, `e(e1, ..., en)`
+
+If `e` is of type `Extern<T>`, then
+
+- `e.f` should be desugared to `T.memberAccess(e, f)`,
+- `e[i]` should be desugared to `T.indexAccess(e, i)`,
+- `e(e1, ..., en)` should be desugared to `T.functionCall(e, [e1, ..., en])`.
+
+##### Desugaring of `e.f = e1`, `e[i] = e2`
+
+If `e` is of type `Extern<T>`, then
+- `e.f = e1` should be desugared to `T.memberUpdate(e, f, e1)`,
+- `e[i] = e2` should be desugared to `T.indexAccessUpdate(e, i, e2)`.
+
+{-- ######################################################### --}
+
+REVIEW ME!
 
 ### What a Language-Specific Interoperability Provider Writes
 
