@@ -253,7 +253,7 @@ func bar(e1: Extern<PythonRT>, e2: Extern<PythonRT>) {
 
 ## Implementation
 
-The implementation of the extern runtime support is in [https://github.com/belolourenco/cangjie_sdk.git](https://github.com/belolourenco/cangjie_sdk.git).
+The implementation of the extern runtime support is in [https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern).
 
 To build the SDK make sure you install the dependencies as in [here](https://gitcode.com/Cangjie/cangjie_build/blob/dev/doc_en/macos.md), and then if you are in macOS run:
 
@@ -265,7 +265,7 @@ $ export OPENSSL_PATH=$CELLAR_PATH/openssl@3/3.6.2/lib     # adjust this to your
 $ export LD_LIBRARY_PATH=$OPENSSL_PATH:$LD_LIBRARY_PATH
 $ export DYLD_LIBRARY_PATH=$OPENSSL_PATH
 
-$ git clone https://github.com/belolourenco/cangjie_sdk.git -b feature_extern
+$ git clone https://github.com/CJPLUK/cangjie_sdk.git -b feature_extern
 $ cd cangjie_sdk
 $ git submodule update --init
 $ bash ./build_scripts/macos/all.sh --bundle-with-links
