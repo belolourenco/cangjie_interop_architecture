@@ -163,42 +163,46 @@ If `e` is of type `Extern<T>`, then
 - `e.f = e1` should be desugared to `T.memberUpdate(e, f, e1)`,
 - `e[i] = e2` should be desugared to `T.indexAccessUpdate(e, i, e2)`.
 
-{-- ######################################################### --}
+### Foreign Runtime Implementer
 
-REVIEW ME!
-
-### What a Language-Specific Interoperability Provider Writes
-
-To provide interoperability support for a new programming language, the implementer should provide a class that implements `Runtime<T>`. Below is a minimal example for a hypothetical Python Runtime.
+The implementer of a foreign runtime should provide a class that implements `Runtime<T>`. Below is a minimal example for a hypothetical Python foreign runtime.
 
 ```cangjie
 public class PythonRT <: Runtime<PythonRT> {
-    public static func evalMemberAccess(e: Extern<PythonRT>, field: String): Extern<PythonRT> { ... }
-    public static func evalFunctionCall(e: Extern<PythonRT>, args: Array<Any>): Extern<PythonRT> { ... }
-    public static func evalIndexAccess (e: Extern<PythonRT>, arg: Any): Extern<PythonRT> { ... }
-    public static func evalAssignment  (e: Extern<PythonRT>, field: String, value: Any): Unit { ... }
+    static func memberAccess(e: Extern<PythonRT>, field: String): Extern<PythonRT> { ... }
+    static func functionCall(e: Extern<PythonRT>, args: Array<Any>): Extern<PythonRT> { ... }
+    static func indexAccess (e: Extern<PythonRT>, index: Any): Extern<PythonRT> { ... }
 
-    public static func fromExtern<R>(h: Extern<PythonRT>): R { ... }
-    public static func toExtern<R>(v: R): Extern<PythonRT> { ... }
+    static func memberUpdate(e: Extern<PythonRT>, field: String, value: Any): Unit { ... }
+    static func indexAccessUpdate(e: Extern<PythonRT>, index: Any, value: Any): Unit { ... }
+
+    static func fromExtern<R>(h: Extern<PythonRT>): R { ... }
+    static func toExtern<R>(v: R): Extern<PythonRT> { ... }
 }
 ```
 
-The interoperability provider is free to implement this in any way it chooses, as long as it implements `Runtime<Python>`.
+The implementer is free to implement this in any way they choose, as long as it implements `Runtime<PythonRT>`.
 
-If we define `Extern` as in Option 3 above, we also need to define a type that implements `Extern<Runtime<T>>`. E.e. 
+In particular, the implementer needs to choose a payload type for the `Extern<PythonRT>` value. This can be as simple as a pointer to a foreign runtime object (e.g. represented by a `Int64`), or as complex as a full-fledged object with fields and methods. The implementer also needs to manage the lifetime of the foreign runtime object, possibly using finalizers.
+
+#### Having multiple foreign runtimes of the same language
+
+It's possible to have multiple versions of the same foreign runtime. One way of achieving is as follows:
 
 ```cangjie
-private struct PythonExtern <: Extern<PythonRT> {
+public open class PythonRT<T> <: Runtime<T> where T <: PythonRT<T> {
     ...
-    public PythonExtern(...) { ... }
+    // implement the methods of Runtime<PythonRT>
+    ...
 }
-```
 
-A concrete example can be found [here](https://github.com/belolourenco/cangjie_interop_architecture/blob/extern_interface/examples/prototype_deveco_1/CangjieInterop/entry/src/main/cangjie/ArkTSRuntime/arkTSRuntime.cj).
+public class PythonRT1 <: PythonRT<PythonRT1> {}
+public class PythonRT2 <: PythonRT<PythonRT2> {}
+```
 
 ### What the User Writes
 
-Once `ExternalVM`s are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line should be interpreted.
+Once foreign runtimes are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line is dessugared.
 
 ```cangjie
 let x: Extern<PythonRT> = 42
@@ -220,56 +224,46 @@ func bar(e1: Extern<PythonRT>, e2: Extern<PythonRT>) {
     let x: Int64 = e1.a.b.c
     // =>
     // let x: Int64 =
-    // PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(
-    //      PythonRT.evalMemberAccess(e1, "a"), "b"), "c")
+    // PythonRT.memberAccess(PythonRT.memberAccess(
+    //      PythonRT.memberAccess(e1, "a"), "b"), "c")
 
     e1.a.b.c  = 101
     // =>
-    // PythonRT.evalAssignment(PythonRt.evalMemberAccess(PythonRT.evalMemberAccess(e1, "a"), "b"), "c", 101)
+    // PythonRT.memberUpdate(PythonRt.memberAccess(PythonRT.memberAccess(e1, "a"), "b"), "c", 101)
 
     e1.a = e2
     // =>
-    // PythonRT.evalAssignment(e1, "a", e2)
+    // PythonRT.memberUpdate(e1, "a", e2)
 
     e1.a.d[42]
     // =>
-    // PythonRT.evalIndexAccess(PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(e1, "a"), "d"), 42)
+    // PythonRT.indexAccess(PythonRT.memberAccess(PythonRT.memberAccess(e1, "a"), "d"), 42)
 
     let e2 = e1.x.y()
     // =>
-    // let tmp = PythonRT.evalMemberAccess(PythonRT.evalMemberAccess(e1, "x"), "y")
-    // let e2: Extern<PythonRT> = PythonRT.evalFunctionCall(tmp, [])
+    // let tmp = PythonRT.memberAccess(PythonRT.memberAccess(e1, "x"), "y")
+    // let e2: Extern<PythonRT> = PythonRT.functionCall(tmp, [])
 
     let e3 = e1.z(x, e2)
     // =>
-    // let tmp2 = PythonRT.evalMemberAccess(e1, "z")
-    // let e3: Extern<PythonRT> = PytonRT.evalFunctionCall(tmp2, [x, e2])
+    // let tmp2 = PythonRT.memberAccess(e1, "z")
+    // let e3: Extern<PythonRT> = PytonRT.functionCall(tmp2, [x, e2])
 }
 ```
 
-## Tasks
+------------------------------------------------------------------------------------------------
 
-1. Provide a library or add compiler built-in support for `Extern`, and `Runtime`.
-    - This might require compiler support is Extern is built-in.
-2. Program transformations (e.g. `let s: String = x` => `let s: String = PythonRT.fromExtern<String>(x)`)
-    - This may be possible to implement with compiler/CHIR plugins.
-4. Prototypes Runtimes implementations for specific programming languages:
-    - ArkTS (https://github.com/belolourenco/cangjie_interop_architecture/tree/main/examples/prototype_deveco_1/CangjieInterop)
-    - Lua
-    - Python
-
-
-## WIP: Type Checking and Program transformations
+# WIP: old stuff!
 
 Let `e1, e2: Extern<T>`.
 
 The following expressions type-check and are transformed as indicated in the comments:
 
 ```cangjie
-let s: String = e1
+let s: String = (String)e1
 // => let s: String = T.fromExtern<String>(e1)
 
-var t: String = e1
+var t: String = (String)e1
 // => var t: String = T.fromExtern<String>(e1)
 
 var e3 = e1
@@ -280,21 +274,23 @@ e3 = "Hello"
 // => e3 = T.toExtern("Hello)
 
 let x = e1.f1.f2.f3
-// => let x = T.evalMemberAccess(T.evalMemberAccess(T.evalMemberAccess(e1, "r1"), "f2"), "f3")
+// => let x = T.memberAccess(T.memberAccess(T.memberAccess(e1, "r1"), "f2"), "f3")
 
 e1("hello world")
-// => T.evalFunctionCall(e1, ["hello world"])
+// => T.functionCall(e1, ["hello world"])
 
 e1.f1.f2 = "boo"
-// => T.evalAssignment(T.evalMemberAccess(e1, "f1"), "f2", "boo")
+// => T.memberUpdate(T.memberAccess(e1, "f1"), "f2", "boo")
 
 let y = e1.foo("goo")
-// => let y: Extern<T> = T.evalFunctionCall(T.evalMemberAccess(e1, "foo"), ["goo"])
+// => let y: Extern<T> = T.functionCall(T.memberAccess(e1, "foo"), ["goo"])
 
 e1.goo = 42
-// => T.evalAssignment(e1, "goo", 42)
+// => T.memberUpdate(e1, "goo", 42)
 
 e1.goo[42]
-// => T.evalIndexAccess(T.evalMemberAccess(e1, "goo"), 42)
+// => T.indexAccess(T.memberAccess(e1, "goo"), 42)
 
+e1.goo[10] = 42
+// => T.indexAccessUpdate(T.memberAccess(e1, "goo"), 10, 42)
 ```
