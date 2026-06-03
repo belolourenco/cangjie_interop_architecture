@@ -32,7 +32,7 @@ public interface Runtime<T> where T <: Runtime<T> {
 
 ```cangjie
 public struct Extern<T> where T <: Runtime<T> {
-    public let payload : Any
+    private let payload : Any
     public Extern(payload: Any) {
         this.payload = payload
     }
