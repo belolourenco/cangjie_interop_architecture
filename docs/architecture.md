@@ -96,9 +96,9 @@ The compiler needs to be modified to support the new forced cast, the intrinsic 
 
 #### Forced cast
 
-The forced cast `(U)e` is a new feature that allows the user to convert an `Extern<T>` value to a specific type `U`. It is desugared to `T.fromExtern<U>(e)`.
+The forced cast `(U)e` is a new feature that allows the user to convert an `Extern<T>` value to a specific type `U`. It is desugared to `T.fromExtern<U>(e)`. Parsing support for the forced cast should be added to the compiler taking into account the parsing disambiguation discussed in [here](https://titanium.cs.berkeley.edu/doc/java-langspec-1.0/19.doc.html#44559). 
 
-Parsing support for the forced cast should be added to the compiler taking into account the parsing disambiguation discussed in [here](https://titanium.cs.berkeley.edu/doc/java-langspec-1.0/19.doc.html#44559).
+The compiler should also perform type checking and desugaring on the forced cast. We defer the details to the type checking and program transformations sections below.
 
 #### New intrinsic function `getPayload`
 
