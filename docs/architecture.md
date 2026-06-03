@@ -145,7 +145,7 @@ No check needs to be performed on the type of `e1`, `e2`.
 
 The type of `e.f = e1`, `e[i] = e2` when `e` is of type `Extern<T>` is `Unit`.
 
-No check needs to be performed on the type of `e1`, `e2`.
+No check needs to be performed on the type of `f`, `i`, `e1`, `e2`.
 
 #### Program transformations
 
