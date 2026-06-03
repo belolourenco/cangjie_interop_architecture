@@ -284,13 +284,11 @@ If you modify the compiler you need to run `bash ./build_scripts/macos/compiler.
 If you modify the standard library you need to run `bash ./build_scripts/macos/stdlib.sh`.
 
 
-The tests for the project are in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/extern1.cj`. To run the tests, run:
+The tests for the project are in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`. To run the tests, run:
 
 ```bash
 $ python3 cangjie_test_framework/main.py --test_cfg=cangjie_test/testsuites/LLT/configs/cjnative/cjnative_test.cfg -pFAIL -j20 --test_list=cangjie_test/testsuites/LLT/extern_testlist cangjie_test/testsuites/LLT/
 ```
-
-Also, tests related to the extern runtime support should be written in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`.
 
 ------------------------------------------------------------------------------------------------
 
