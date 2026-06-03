@@ -290,6 +290,8 @@ The tests for the project are in `cangjie_test/testsuites/LLT/Runtime/CJNative/e
 $ python3 cangjie_test_framework/main.py --test_cfg=cangjie_test/testsuites/LLT/configs/cjnative/cjnative_test.cfg -pFAIL -j20 --test_list=cangjie_test/testsuites/LLT/extern_testlist cangjie_test/testsuites/LLT/
 ```
 
+Also, tests related to the extern runtime support should be written in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`.
+
 ------------------------------------------------------------------------------------------------
 
 # WIP: old stuff!
