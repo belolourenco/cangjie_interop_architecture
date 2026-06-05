@@ -49,7 +49,7 @@ The intrinsic function `getPayload` returns the payload of the `Extern` value. I
 ```cangjie
 // MemberAccessException thrown if an attempt is made to access or update a non-existing member
 public class MemberAccessException <: Exception {
-    public ExternDynamicException(message: String) {
+    public MemberAccessException(message: String) {
         super(message)
     }
 }
