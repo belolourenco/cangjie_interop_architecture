@@ -1,335 +1,558 @@
-# Architecture Document for the Cangjie Extern Type
+# Architecture/Feature Design Document: Cangjie `Extern<T>` Type
 
-This document describes the interoperability architecture for the proposal linked [here](https://github.com/danghica/interop/blob/main/The%20Cangjie%20Extern%20type.md).
+**Feature:** Language-level dynamic interoperability via `Extern<T>` and `ForeignRuntime<T>`
+**Proposal:** [The Cangjie Extern type](https://wiki.huawei.com/domains/4014/wiki/11230/WIKI2026040810696277)
+**Implementation MR:** [cangjie_compiler#1871 — feat: extern runtime](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)
+**SDK branch:** [CJPLUK/cangjie_sdk — feature_extern_runtime](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern_runtime) (cangjie_compiler, cangjie_runtime, cangjie_test, and cangjie_tools git submodules at matching commits)
 
-## Overall Architecture
+---
 
-### Changes to `std.core`
+# Changes/fixes since last architecture meeting (16/07/2026)
 
-The following types are to be defined in a new file `extern_runtime.cj` to be part of the `std.core` library.
 
-#### `Runtime` interface
+<details>
+<summary> 1. Be more precise about implementation: diagram should mention all compilation stages. </summary>
 
-`Runtime`, defined below, specifies the interface that language-specific interoperability providers must implement.
+<br/>
+
+Fixed the diagram and added more details in [Feature Impact Analysis](#feature-impact-analysis)
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+<summary> 2. Implicit conversion to Extern </summary>
+
+<br/>
+
+Make it explicit what we mean by "is in a context where an expression of type Extern<T> is expected".
+
+Made it clear in [Implicit conversion to Extern](#implicit-conversion-to-externt).
+
+1. right-hand side of variable declaration
+2. right-hand side of assignment
+3. argument for function-like calls
+4. argument to return
+5. last expression of body of function
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+
+<summary> 3. Check if multiple assignment is compatible with Extern desugaring </summary>
+
+<br/>
+
+Yes, it does. it is now mentioned in [Multiple Assignment Expression](#multiple-assignment-expression).
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+<summary> 4. How to handle compound assignment? </summary>
+
+<br/>
+
+Desugaring proposal in [Compound Assignment](#compound-assignment).
+
+</details>
+
+
+<details>
+<summary> 5. Forced cast: namespace for types is the same as namespace for expressions </summary>
+
+<br/>
+
+
+`If U is both an expression and a type (because U could be an identifier, and both the name of a type and a variable/function declaration) then (U)(e) is a function application`
+
+is not allowed. Type and expression identifiers share the same namespace.
+
+It's always known if an identifier refers to a `type` or `expression`. Fixed in [Support for forced cast `(U)e`.](#support-for-forced-cast-ue)
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+
+<summary> 6. Is forced cast compatible with a possible proposal for generic forced cast? </summary>
+
+<br/>
+
+We don't expect any issues if the desugaring is as below.
+
+<br/>
+
+For a type `U` and an expression `exp`, `(U)exp` is desugared as
+
+1. `T.fromExtern<U>(exp)`, if `exp: Extern<T>` for any `T <: ForeignRuntime`
+2. `(exp as U).getOrThrow()`, otherwise
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+<summary> 7. Use intrinsics in Extern methods instead of compiler hacks </summary>
+
+<br/>
+
+Call intrinsic functions in the body of the constructor and `getPayload` instead of having the compiler handling them as a special case. Also specify explicitly that `getPayload(Extern<T>(x)) = x`.
+
+Fixed. See [`Extern<T>` struct](#externt-struct).
+
+<br/>
+<br/>
+
+</details>
+
+<details>
+<summary> 8. Rename Exception</summary>
+
+<br/>
+
+MemberAccessException -> ExternMemberAccessException	
+FunctionAccessException	-> ExternFunctionAccessException
+FunctionCallException -> ExternFunctionCallException
+IndexAccessException -> ExternIndexedAccessException
+ExternConversionException -> ExternConversionException
+ExternDynamicException	-> ForeignRuntimeException
+
+Fixed. See [Exception hierarchy](#exception-hierarchy-all-in-stdcore)
+
+<br/>
+<br/>
+
+</details>
+
+
+<details>
+<summary> 9. Is extern_runtime.cj in line with std.core style? </summary>
+
+<br/>
+
+We believe it's in line with current style. Fine grained review will take place when PR is merged.
+
+https://gitcode.com/claudio_/cangjie_runtime/blob/feature_extern_runtime/stdlib/libs/std/core/extern_runtime.cj
+
+<br/>
+<br/>
+
+</details>
+
+
+---
+
+
+## 1. Source and Value of Feature Requirements/Problems/Motivation
+
+### Background
+
+Existing interoperability mechanisms are language-specific, reflection-based, and require significant boilerplate. The `Extern<T>` feature addresses this by providing a lightweight, generic representation of foreign objects that enables direct interaction with external runtimes while keeping runtime-specific behavior encapsulated.
+
+`Extern<T>` introduces a runtime-agnostic abstraction for references to values managed outside the Cangjie runtime. Rather than assuming a foreign object's type system or memory layout, Cangjie treats these values as opaque references and relies on the associated ForeignRuntime implementation to define conversion semantics and dynamic operations. This approach provides a lightweight alternative to wrapper-based interop while remaining extensible to multiple foreign runtimes.
+
+The requirements for improved interop are captured in [Dynamic and gradual types for improved Cangjie–ArkTS interop](https://onebox.huawei.com/v/13b0bf0281118cb4b9ac3bd0366436eb?type=0) and the proposal document [The Cangjie Extern type](https://wiki.huawei.com/domains/4014/wiki/11230/WIKI2026040810696277). Together they motivate a language-level mechanism inspired by C# `dynamic`, but scoped explicitly to foreign runtimes rather than suspending all static typing.
+
+### Before vs after (user perspective)
+
+**Before** — reflection-based ArkTS interop:
 
 ```cangjie
-public interface Runtime<T> where T <: Runtime<T> {
-    static func memberAccess(e: Extern<T>, field: String)              : Extern<T>
-    static func functionCall(e: Extern<T>, args: Array<Any>)           : Extern<T>
-    static func indexAccess (e: Extern<T>, index: Any)                 : Extern<T>
+func testCJ(runtime: JSContext, callInfo: JSCallInfo): Unit {
+    let api = callInfo[0].asObject()
+    let addF = api["add"].asFunction()
+    let args = [runtime.number(2).toJSValue(), runtime.number(3.5).toJSValue()]
+    let receiver = runtime.null().toJSValue()
+    let result = addF.call(args, thisArg: receiver).asNumber().toFloat64()
+    println("Result: ${result}")
+}
+```
 
-    static func memberUpdate(e: Extern<T>, field: String, value: Any)  : Unit
-    static func indexAccessUpdate(e: Extern<T>, index: Any, value: Any): Unit
+**After** — `Extern<T>` for some generic runtime `T`, e.g. ArkTS:
+
+```cangjie
+func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
+    let calculator = vm.calculator
+    let result: Float64 = (Float64)(calculator.add(2, 3.5))
+    println("Result: ${result}")
+}
+```
+
+### Design philosophy
+
+`Extern<T>` is inspired by C# `dynamic` but deliberately scoped:
+
+- `T` must implement `ForeignRuntime<T>` — the type parameter distinguishes runtimes.
+- Cangjie makes no assumptions about foreign value layout; the runtime owns semantics.
+- Dynamic features (member access, call, index) are compiler-desugared to static `ForeignRuntime` calls.
+- Cangjie values are implicitly converted to `Extern<T>` when an `Extern<T>` is expected.
+- `e: Extern<T>` needs to be explicitly converted to Cangjie through a forced cast operator of the form `(U)e`.
+
+### Major benefits
+
+1. **Productivity:** Eliminate reflection-based API or IDLize-like approaches
+2. **Ergonomics:** Idiomatic Cangjie syntax for member access, calls, and indexing on foreign values.
+3. **Generality:** Same mechanism works for ArkTS, Python, SQL engines, JSON parsers, or any dynamically invocable evaluator.
+4. **Safety vs `dynamic`:** `Extern<T>` is explicitly tied to runtime `T`, reducing the abuse surface of unconstrained dynamic typing.
+
+
+---
+
+## 2. Feature Impact Analysis <span id="feature-impact-analysis"></span>
+
+### Position in the system <span id="position-in-the-system"></span>
+
+Compilation stages according to [cangjie_compiler/src/Frontend/CompilerInstance.cpp](https://gitcode.com/Cangjie/cangjie_compiler/blob/main/src/Frontend/CompilerInstance.cpp).
+
+This document is mostly about the boxes in red.
+
+```mermaid
+flowchart TB
+    subgraph UserCode["User / Application Code"]
+        UC["Cangjie source using Extern&lt;T&gt;"]
+    end
+
+    subgraph Compiler["Cangjie Compiler (cjc)"]
+        LoadPlugin["Load Plugins"]
+        Parser["Parser (3)<br/><br/><p style='text-align:left'>Support for parsing (U)e as ForcedCastExpr</p>"]
+        ConditionCompile["Condition Compile"]
+        ImportPackage["Import Package"]
+        MacroExpand["Macro Expand (4)<br/><br/><p style='text-align:left'>add support for forced cast</p>"]
+        ASTDiff["AST Diff"]
+        Sema["Sema (5)<br/><br/><p style='text-align:left'>type checking of Extern expressions</p>"]
+        DesugarAfterSema["DesugarAfterSema (6)<br/><br/><p style='text-align:left'>set .desugarExpr field with desugared Extern expr</p>"]
+        GenericInstantiation["Generic Instantiation"]
+        OverflowStrategy["Overflow Strategy"]
+        Mangling["Mangling"]
+        SaveCJO["Save CJO"]
+        CHIR["CHIR"]
+        CodeGen["Code Generation"]
+        SaveResults["Save Results"]
+        style Parser fill:#fa7c5c
+        style MacroExpand fill:#fa7c5c
+        style DesugarAfterSema fill:#fa7c5c
+        style Sema fill:#fa7c5c
+    end
+
+    subgraph StdAST["std.ast (2)"]
+        ForcedCastExpr["ForcedCastExpr<br/>class"]
+        style ForcedCastExpr fill:#fa7c5c
+    end
+
+    subgraph StdCore["std.core (1)"]
+        ExternType["Extern&lt;T&gt;<br/>struct"]
+        Exc["Exception<br/>hierarchy"]
+        FRT["ForeignRuntime&lt;T&gt;<br/>interface"]
+        style ExternType fill:#fa7c5c
+        style Exc fill:#fa7c5c
+        style FRT fill:#fa7c5c
+    end
+
+    subgraph RuntimeImpl["Foreign&nbsp;Runtime&nbsp;Implementations"]
+        ArkTS["ArkTS runtime"]
+        Python["Python runtime (hypothetical)"]
+    end
+
+    subgraph ForeignVM["Foreign Runtimes"]
+        ArkVM["ArkTS VM"]
+        PyVM["Python VM"]
+        style ArkVM fill: #fcfafa
+        style PyVM fill: #fcfafa
+    end
+
+    UserCode -.-> |"possibly imports"| StdAST
+    StdAST ~~~ StdCore
+    UC --> Compiler
+    LoadPlugin --> Parser --> ConditionCompile --> ImportPackage --> MacroExpand
+    MacroExpand --> ASTDiff --> Sema --> DesugarAfterSema --> GenericInstantiation
+    GenericInstantiation --> OverflowStrategy --> Mangling --> SaveCJO
+    SaveCJO --> CHIR --> CodeGen --> SaveResults
+    Sema -.->|"uses"| StdCore
+    UC -.-> |"imports"| StdCore
+    ArkTS --> ArkVM
+    Python --> PyVM
+    FRT -.->|"implemented by"| ArkTS
+    FRT -.->|"implemented by"| Python
+    UserCode -.-> |"possibly imports"| RuntimeImpl
+    style ForeignVM fill:#b3b1b1
+    style Compiler fill:#c1e1e3
+```
+
+### Changes 
+
+| Component | Role |
+| --- | --- |
+| `cangjie_runtime` - std.core | (1) New file [`extern_runtime.cj`](https://gitcode.com/claudio_/cangjie_runtime/blob/feature_extern_runtime/stdlib/libs/std/core/extern_runtime.cj) in `std.core` with `Extern<T>` struct, `ForeignRuntime<T>` interface, 6 new exceptions, and documentation about new public declarations. |
+| `cangjie_runtime` - std.ast | (2) New `ForcedCastExpr <: Expr` class. Class declaration, flatbuffers serialization. |
+| `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to the type checking stage. |
+| `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
+| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. |
+| `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
+
+No changes in the compiler backend or any specific OS-specific features.
+
+### ABI/API compatibility
+
+- **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, six exception classes — additive, no breaking change to existing APIs.
+- **New syntax:** Forced cast `(U)e` — purely additive.
+- **ABI:** `Extern<T>` is a `struct` holding an `Any` payload (similar to `Array`); stable across versions once released.
+- **Backward compatibility:** Full compatible, including `ohos.ark_interop` code continues to work; migration is opt-in.
+
+### External user perception
+
+External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)e` forced cast in the language documentation.
+
+### Performance impact
+
+| Aspect | Impact |
+| --- | --- |
+| **Compile time** | Parsing forced-cast, typing of Extern expressions and additional pass to desugar Extern expressions (+1300 loc); should negligible for typical projects |
+| **Runtime** | Each dynamic operation is a static call to `ForeignRuntime` method; runtime implementer is responsible for the design, implementation, and optimization of these methods |
+| **Space** | `Extern<T>` is a single `Any` payload per handle |
+
+---
+
+## 3. Design/Implementation Plan
+
+### 3.1 Standard library (`std.core`)
+
+**New file:** `stdlib/libs/std/core/extern_runtime.cj`
+
+#### `ForeignRuntime<T>` interface
+
+```cangjie
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+    static func memberAccess(e: Extern<T>, field: String): Extern<T>
+    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
+    static func indexedAccess(e: Extern<T>, index: Any): Extern<T>
+
+    static func memberUpdate(e: Extern<T>, field: String, value: Any): Unit
+    static func indexedUpdate(e: Extern<T>, index: Any, value: Any): Unit
 
     static func fromExtern<R>(h: Extern<T>): R
     static func toExtern<R>(v: R): Extern<T>
 }
 ```
 
-#### `Extern` type
-
-`Extern<T>`, defined below, is a wrapper around the value the Runtime<T> implementer wants to use as a handle for the foreign runtime.
+#### `Extern<T>` struct <span id="externt-struct"></span>
 
 ```cangjie
-public struct Extern<T> where T <: Runtime<T> {
-    private let payload : Any
-    public Extern(payload: Any) {
-        this.payload = payload
-    }
-}
+@Intrinsic
+private func setExtern(e: Extern<T>, payload: Any)
 
 @Intrinsic
-public func getPayload<T>(e: Extern<T>): Any where T<: Runtime<T>
-```
+private func getPayload(e: Extern<T>): Any
 
-The intrinsic function `getPayload` returns the payload of the `Extern` value. It's implementation is defined within the compiler and can be seen as `return e.payload`. It is used to disambiguate the dynamic field access of the form `e.payload`, for some `e: Extern<T>`.
-
-#### Predefined Exceptions
-
-```cangjie
-// MemberAccessException thrown if an attempt is made to access or update a non-existing member
-public class MemberAccessException <: Exception {
-    public MemberAccessException(message: String) {
-        super(message)
+public struct Extern<T> where T <: ForeignRuntime<T> {
+    private var payload: Any = ()
+    public Extern(payload: Any) {
+        setExtern(this, payload)
     }
-}
 
-// FunctionAccessException thrown if an attempt is made to access a non-existing function
-public class FunctionAccessException <: Exception {
-    public FunctionAccessException(message: String) {
-        super(message)
-    }
-}
-
-// FunctionCallException thrown if an attempt is made to call a function with the wrong arguments
-public class FunctionCallException <: Exception {
-    public FunctionCallException(message: String) {
-        super(message)
-    }
-}
-
-// IndexAccessException thrown if an attempt is made to access or update with the wrong index, including out-of-bounds errors
-public class IndexAccessException <: Exception {
-    public IndexAccessException(message: String) {
-        super(message)
-    }
-}
-
-// ExternDynamicException thrown if a function in the foreign runtime throws a runtime exception
-public class ExternDynamicException <: Exception {
-    public ExternDynamicException(message: String) {
-        super(message)
-    }
-}
-
-// ExternConversionException thrown if data cannot be converted to or from an Extern type as required.
-public class ExternConversionException <: Exception {
-    public ExternConversionException(message: String) {
-        super(message)
+    public static func getPayload(e: Extern<T>): Any {
+        getPayload(e)
     }
 }
 ```
 
-### Changes to the compiler
+**Note:** the property `getPayload(Extern<T>(v)) = v` holds for any value `v: Any`, and `T <: ForeignRuntime<T>`.
 
-The compiler needs to be modified to support the new forced cast, the intrinsic function `getPayload`, the type checking of `Extern` expressions and the program transformations.
+#### Exception hierarchy (all in `std.core`) <span id="exception-hierarchy-all-in-stdcore"></span>
 
-#### Forced cast
+| Exception | When raised |
+| --- | --- |
+| `ExternMemberAccessException` | Non-existing member access/update |
+| `ExternFunctionAccessException` | Non-existing function access |
+| `ExternFunctionCallException` | Wrong arguments to function call |
+| `ExternIndexedAccessException` | Wrong index or out-of-bounds |
+| `ExternConversionException` | `fromExtern` / `toExtern` conversion failure |
+| `ForeignRuntimeException` | Foreign runtime throws (includes foreign stack trace) |
 
-The forced cast `(U)e` is a new feature that allows the user to convert an `Extern<T>` value to a specific type `U`. It is desugared to `T.fromExtern<U>(e)`. Parsing support for the forced cast should be added to the compiler taking into account the parsing disambiguation discussed in [here](https://titanium.cs.berkeley.edu/doc/java-langspec-1.0/19.doc.html#44559). 
+### 3.2 Compiler changes
 
-The compiler should also perform type checking and desugaring on the forced cast. We defer the details to the type checking and program transformations sections below.
+#### Type checking rules
 
-#### New intrinsic function `getPayload`
+| Expression | Rule |
+| --- | --- |
+| `(U)e` | Succeeds if `e: Extern<T>` and `U` a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
+| `e` where `Extern<T>` expected | Always succeeds; either `e` is already `Extern<T>` or it is desugared into `T.toExtern<U>(e)` if `e: U` and `U ≠ Extern<T>` |
+| `e.f`, `e[i]`, `e(…)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or arguments |
+| `e.f = v`, `e[i] = v` when `e: Extern<T>` | Result type is `Unit`; no check on `f`, `i`, or `v` |
 
-The intrinsic function `getPayload` is a new feature that allows the user to get the payload of an `Extern<T>` value. 
+#### Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
 
-It is implemented internally in the compiler as:
+- **Parse:** `ForcedCastExpr` AST node holds both readings (e.g. during parsing we don't know if `(U)(e)` is forced cast or function call).
+- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime`.; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
+- **Disambiguation:** If `U` is a type, `(U)(e)` is a forced cast; if `U` is an expression, then `(U)(e)` is function application.
+- **Desugar:** `(U)e` → `T.fromExtern<U>(e)`.
+
+#### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
+
+When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function) we desugar it into `T.toExtern<U>(cjexp)`.
+
+**Example 1**:
+Assume `cjexp` has type `U` with `U != Extern<T>`. Then:
+
+`let x: Extern<R> = cjexp` is desugared into `let x: Extern<R> = R.toExtern<U>(cjexp)`
+
+
+**Example 2**:
 
 ```cangjie
-public func getPayload<T>(e: Extern<T>): Any where T<: Runtime<T> {
-    return e.payload
+func foo(..., x: Extern<R>, ...) {...}
+foo(..., 42, ...)
+```
+
+is desugared into
+
+```cangjie
+func foo(x: Extern<R>) {...}
+foo(..., R.toExtern<Int64>(42), ...)
+```
+
+#### Dynamic expression desugaring
+
+Let `e: Extern<T>`. Then:
+
+| Surface syntax | Is desugared into |
+| --- | --- |
+| `e.f` | `T.memberAccess(e, "f")` |
+| `e.f = v` | `T.memberUpdate(e, "f", v)` |
+| `e[i]` | `T.indexedAccess(e, i)` |
+| `e[i] = v` | `T.indexedUpdate(e, i, v)` |
+| `e(a, b, …)` | `T.functionCall(e, [a, b, …])` |
+
+#### Clarifications on assignment
+
+##### Multiple Assignment Expression <span id="multiple-assignment-expression"></span>
+
+Multiple assignment of the form `(x1, ..., x3) = ...` remains consistent with the current specification/implementation. This occurs naturally because the desugaring of multiple assignment occurs before the desugaring of Extern.
+
+##### Compound Assignment <span id="compound-assignment"></span>
+
+Compound assignment are not desugared in the compiler and thus need to be handled with care.
+
+We desugar these as follows, depending on the shape of the left-hand side expression:
+
+###### Case 1
+
+Let `x: Extern<T>` and `e2: Extern<T>`, then:
+
+```
+x += e2
+```
+
+is desugared into
+
+```cangjie
+let tmp1 = T.memberAccess(x, "+")
+x = T.functionCall(tmp1, [e2])
+```
+
+###### Case 2
+
+Let `e1: Extern<T>` and `e2: Extern<T>`, then:
+
+```cangjie
+e1.foo += e2
+```
+
+is desugared into
+
+```cangjie
+let tmp1 = e1
+let tmp2 = T.memberAccess(T.memberAccess(tmp1, "foo"), "+")
+T.memberUpdate(tmp1, "foo", T.functionCall(tmp2, [e2]))
+```
+
+###### Case 3
+
+Let `e1: Extern<T>`, `e2: Extern<T>`, and `idx: Any`, then:
+
+```cangjie
+e1[idx] += e2
+```
+
+is desugared into
+
+
+```cangjie
+let tmp1 = e1
+let tmp2 = idx
+let tmp3 = Runtime.indexedAccess(tmp1, tmp2)
+let tmp4 = Runtime.memberAccess(tmp3, "+")
+Runtime.indexedUpdate(tmp1, tmp2, Runtime.functionCall(tmp4, [e2]))
+```
+
+### 3.3 Foreign runtime implementer API
+
+A foreign runtime can be implemented as follows. It's totally up to the runtime implementer the decision about how this runtime must be implemented.
+
+```cangjie
+public class ArkTS <: ForeignRuntime<ArkTS> {
+    static func memberAccess(e: Extern<ArkTS>, field: String): Extern<ArkTS> { ... }
+    static func functionCall(e: Extern<ArkTS>, args: Array<Any>): Extern<ArkTS> { ... }
+    static func indexedAccess(e: Extern<ArkTS>, index: Any): Extern<ArkTS> { ... }
+    static func memberUpdate(e: Extern<ArkTS>, field: String, value: Any): Unit { ... }
+    static func indexedUpdate(e: Extern<ArkTS>, index: Any, value: Any): Unit { ... }
+    static func fromExtern<R>(h: Extern<ArkTS>): R { ... }
+    static func toExtern<R>(v: R): Extern<ArkTS> { ... }
 }
 ```
 
-#### Type checking
-
-##### Type checking of `(U)e`
-
-The type checking of `(U)e` should be performed as follows:
-
-1. If type of `e` is `Extern<T>` for some `T`, then succeed!
-3. If type if `e` is not `Extern<T>` for some `T`, then fail!
-
-##### Type checking when `Extern<T>` is expected
-
-The type checking of `e` when `Extern<T>` is expected should always succeed no matter the type of `e`.
-
-> *Intuition*: if `e` is of type `U` with `U != T`, then `e` should be desugared to `Extern<T>` using `T.toExtern<U>(e)`.
-
-##### Type checking of `e.f`, `e[i]`, `e(e1, ..., en)`
-
-The type of `e.f`, `e[i]`, `e(e1, ..., en)` when `e` is of type `Extern<T>` is `Extern<T>`.
-
-No check needs to be performed on the type of `f`, `i`, `e1`, ..., `en`.
-
-##### Type checking of `e.f = e1`, `e[i] = e2`
-
-The type of `e.f = e1`, `e[i] = e2` when `e` is of type `Extern<T>` is `Unit`.
-
-No check needs to be performed on the type of `f`, `i`, `e1`, `e2`.
-
-#### Program transformations
-
-##### Desugaring of `(U)e`
-
-If `(U)e` has type `Extern<T>` for some `T`, then desugar to `T.fromExtern<U>(e)`.
-
-##### Desugaring of `e` when `Extern<T>` is expected
-
-If `e` is of type `U` with `U != T`, then desugar to `T.toExtern<U>(e)`.
-
-##### Desugaring of `e.f`, `e[i]`, `e(e1, ..., en)`
-
-If `e` is of type `Extern<T>`, then
-
-- `e.f` should be desugared to `T.memberAccess(e, f)`,
-- `e[i]` should be desugared to `T.indexAccess(e, i)`,
-- `e(e1, ..., en)` should be desugared to `T.functionCall(e, [e1, ..., en])`.
-
-##### Desugaring of `e.f = e1`, `e[i] = e2`
-
-If `e` is of type `Extern<T>`, then
-- `e.f = e1` should be desugared to `T.memberUpdate(e, f, e1)`,
-- `e[i] = e2` should be desugared to `T.indexAccessUpdate(e, i, e2)`.
-
-### Foreign Runtime Implementer
-
-The implementer of a foreign runtime should provide a class that implements `Runtime<T>`. Below is a minimal example for a hypothetical Python foreign runtime.
+**Multiple instances of same language:**
 
 ```cangjie
-public class PythonRT <: Runtime<PythonRT> {
-    static func memberAccess(e: Extern<PythonRT>, field: String): Extern<PythonRT> { ... }
-    static func functionCall(e: Extern<PythonRT>, args: Array<Any>): Extern<PythonRT> { ... }
-    static func indexAccess (e: Extern<PythonRT>, index: Any): Extern<PythonRT> { ... }
-
-    static func memberUpdate(e: Extern<PythonRT>, field: String, value: Any): Unit { ... }
-    static func indexAccessUpdate(e: Extern<PythonRT>, index: Any, value: Any): Unit { ... }
-
-    static func fromExtern<R>(h: Extern<PythonRT>): R { ... }
-    static func toExtern<R>(v: R): Extern<PythonRT> { ... }
-}
-```
-
-The implementer is free to implement this in any way they choose, as long as it implements `Runtime<PythonRT>`.
-
-In particular, the implementer needs to choose a payload type for the `Extern<PythonRT>` value. This can be as simple as a pointer to a foreign runtime object (e.g. represented by a `Int64`), or as complex as a full-fledged object with fields and methods. The implementer also needs to manage the lifetime of the foreign runtime object, possibly using finalizers.
-
-#### Having multiple foreign runtimes of the same language
-
-It's possible to have multiple versions of the same foreign runtime. One way of achieving is as follows:
-
-```cangjie
-public open class PythonRT<T> <: Runtime<T> where T <: PythonRT<T> {
-    ...
-    // implement the methods of Runtime<PythonRT>
-    ...
-}
-
+public open class PythonRT<T> <: ForeignRuntime<T> where T <: PythonRT<T> { ... }
 public class PythonRT1 <: PythonRT<PythonRT1> {}
 public class PythonRT2 <: PythonRT<PythonRT2> {}
 ```
 
-### What the User Writes
+## 4. Summary of Key DT Test Cases
 
-Once foreign runtimes are defined, users can rely on them to interoperate with other languages. Below are some examples, with comments explaining how each line is dessugared.
+For some valid implementation `class MockRT <: ForeignRuntime<MockRT> { ... }` the following is expected.
 
-```cangjie
-let x: Extern<PythonRT> = 42
-// => let x: Extern<PythonRT> = PythonRT.toExtern(42)
+|  | Preconditions | Key Test Steps | Expected Result |
+| --- | --- | --- | --- |
+| Implicit toExtern | | `let x: Extern<MockRT> = 42` | Desugars to `MockRT.toExtern(42)` |
+| Forced cast success | `e: Extern<MockRT>`, `MockRT.fromExtern<String>` implemented | `let s: String = (String)e` | Desugars to `let s: String = MockRT.fromExtern<String>(e)` |
+| Forced cast type error |  | `(String)42` | Compile error:  `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions` |
+| Member access | `e: Extern<MockRT>` | `e.foo` | Desugars to `MockRT.memberAccess(e, "foo")`; type is `Extern<MockRT>` |
+| Member update | `e: Extern<MockRT>` | `e.foo = 42` | Desugars to `MockRT.memberUpdate(e, "foo", 42)`; type is Unit |
+| Index access | `e: Extern<MockRT>` | `e[0]` | Desugars to `MockRT.indexedAccess(e, 0)`; type is `Extern<MockRT>` |
+| Index update | `e: Extern<MockRT>` | `e[0] = "x"` | Desugars to `MockRT.indexedUpdate(e, 0, "x")`; type is Unit |
+| Function call | `e: Extern<MockRT>` | `e(1, 2)` | Desugars to `MockRT.functionCall(e, [1, 2])`; type is `Extern<MockRT>` |
+| Chained access | `e: Extern<MockRT>` | `e.a.b.c` | `MockRT.memberAccess(MockRT.memberAccess(MockRT.memberAccess(e, "a"), "b"), "c")` |
+| Conversion failure | `e: Extern<MockRT>`; `MockRT.fromExtern` doesn't know how to convert `e` to `Int32` | `(Int32)e` | Desugars to `MockRT.fromExtern<Int32>(e)`; type is `Int32`; throws `ExternConversionException` at runtime; |
+| Missing member | `e: Extern<MockRT>`; `MockRT.memberAccess` cannot access dynamic method `foo` | `e.foo` | Desugars to `MockRT.memberAccess(e, "foo")`; type is `Extern<MockRT>`; throws `ExternMemberAccessException` at runtime |
+| Ambiguous parse | `f` is a function, not a type | `(f)(args)` | Parsed as ordinary call, not forced cast |
+| Ambiguous parse — call wins | `f` is a function, and a type | `(f)(args)` | Parsed as ordinary call, not forced cast |
+| Get payload | `e: Extern<MockRT>` | `Extern<MockRT>.getPayload(e)` | Returns `e.payload` |
+| Extern assign same type | `e1, e2: Extern<MockRT>` | `e1 = e2` | Normal assignment, no conversion |
 
-func foo(e1: Extern<PythonRT>) {
-    let s: String = e1
-    // => let s: String = PythonRT.fromExtern<String>(x)
+Test suite location: `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`
 
-    let e2: Extern<PythonRT> = e1
-    // normal Cangjie semantics
+---
 
-    var e3: Extern<PythonRT>
-    e3 = e2
-    // normal Cangjie semantics
-}
+## 5. Conclusion
 
-func bar(e1: Extern<PythonRT>, e2: Extern<PythonRT>) {
-    let x: Int64 = e1.a.b.c
-    // =>
-    // let x: Int64 =
-    // PythonRT.memberAccess(PythonRT.memberAccess(
-    //      PythonRT.memberAccess(e1, "a"), "b"), "c")
+The `Extern<T>` feature introduces a language-level interoperability mechanism that:
 
-    e1.a.b.c  = 101
-    // =>
-    // PythonRT.memberUpdate(PythonRt.memberAccess(PythonRT.memberAccess(e1, "a"), "b"), "c", 101)
+1. Replaces verbose reflection-based interop with idiomatic Cangjie syntax.
+2. Desugars dynamic operations to static `ForeignRuntime<T>` calls at compile time.
+3. Provides precise, typed exceptions for foreign operation failures.
+4. Generalizes beyond ArkTS to any foreign runtime.
 
-    e1.a = e2
-    // =>
-    // PythonRT.memberUpdate(e1, "a", e2)
-
-    e1.a.d[42]
-    // =>
-    // PythonRT.indexAccess(PythonRT.memberAccess(PythonRT.memberAccess(e1, "a"), "d"), 42)
-
-    let e2 = e1.x.y()
-    // =>
-    // let tmp = PythonRT.memberAccess(PythonRT.memberAccess(e1, "x"), "y")
-    // let e2: Extern<PythonRT> = PythonRT.functionCall(tmp, [])
-
-    let e3 = e1.z(x, e2)
-    // =>
-    // let tmp2 = PythonRT.memberAccess(e1, "z")
-    // let e3: Extern<PythonRT> = PytonRT.functionCall(tmp2, [x, e2])
-}
-```
-
-## Implementation
-
-The implementation of the extern runtime support is in [https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern).
-
-To build the SDK make sure you install the dependencies as in [here](https://gitcode.com/Cangjie/cangjie_build/blob/dev/doc_en/macos.md), and then if you are in macOS run:
-
-```bash
-$ export ARCH=aarch64
-$ export CELLAR_PATH=/opt/homebrew/Cellar                  # adjust this to your system
-$ export PATH=$CELLAR_PATH/llvm@16/16.0.6_1/bin/:$PATH     # adjust this to your system
-$ export OPENSSL_PATH=$CELLAR_PATH/openssl@3/3.6.2/lib     # adjust this to your system
-$ export LD_LIBRARY_PATH=$OPENSSL_PATH:$LD_LIBRARY_PATH
-$ export DYLD_LIBRARY_PATH=$OPENSSL_PATH
-
-$ git clone https://github.com/CJPLUK/cangjie_sdk.git -b feature_extern
-$ cd cangjie_sdk
-$ git submodule update --init
-$ bash ./build_scripts/macos/all.sh --bundle-with-links
-$ source software/cangjie/envsetup.sh
-```
-
-After the commands above, the following command should work and output the `cjc` and `cjpm` versions:
-
-```bash
-$ cjc --version
-$ cjpm --version
-```
-
-If you modify the compiler you need to run `bash ./build_scripts/macos/compiler.sh`.
-
-If you modify the standard library you need to run `bash ./build_scripts/macos/stdlib.sh`.
-
-
-The tests for the project are in `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`. To run the tests, run:
-
-```bash
-$ python3 cangjie_test_framework/main.py --test_cfg=cangjie_test/testsuites/LLT/configs/cjnative/cjnative_test.cfg -pFAIL -j20 --test_list=cangjie_test/testsuites/LLT/extern_testlist cangjie_test/testsuites/LLT/
-```
-
-------------------------------------------------------------------------------------------------
-
-# WIP: old stuff!
-
-Let `e1, e2: Extern<T>`.
-
-The following expressions type-check and are transformed as indicated in the comments:
-
-```cangjie
-let s: String = (String)e1
-// => let s: String = T.fromExtern<String>(e1)
-
-var t: String = (String)e1
-// => var t: String = T.fromExtern<String>(e1)
-
-var e3 = e1
-e3 = e2
-// Type check ok, no transformations!
-
-e3 = "Hello"
-// => e3 = T.toExtern("Hello)
-
-let x = e1.f1.f2.f3
-// => let x = T.memberAccess(T.memberAccess(T.memberAccess(e1, "r1"), "f2"), "f3")
-
-e1("hello world")
-// => T.functionCall(e1, ["hello world"])
-
-e1.f1.f2 = "boo"
-// => T.memberUpdate(T.memberAccess(e1, "f1"), "f2", "boo")
-
-let y = e1.foo("goo")
-// => let y: Extern<T> = T.functionCall(T.memberAccess(e1, "foo"), ["goo"])
-
-e1.goo = 42
-// => T.memberUpdate(e1, "goo", 42)
-
-e1.goo[42]
-// => T.indexAccess(T.memberAccess(e1, "goo"), 42)
-
-e1.goo[10] = 42
-// => T.indexAccessUpdate(T.memberAccess(e1, "goo"), 10, 42)
-```
+The compiler implementation ([Git code PR #1871](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)) adds forced cast parsing, `DesugarExtern.cpp`, and Sema support. The standard library adds `Extern<T>`, `ForeignRuntime<T>`, and six exception classes to `std.core`. CI validation has passed.
