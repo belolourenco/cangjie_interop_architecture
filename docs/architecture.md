@@ -236,12 +236,13 @@ flowchart TB
         OverflowStrategy["Overflow Strategy"]
         Mangling["Mangling"]
         SaveCJO["Save CJO"]
-        CHIR["CHIR"]
+        CHIR["CHIR (7)<br/><br/><p style='text-align:left'>handle intrinsics setExtern/getPayload</p>"]
         CodeGen["Code Generation"]
         SaveResults["Save Results"]
         style Parser fill:#fa7c5c
         style MacroExpand fill:#fa7c5c
         style DesugarAfterSema fill:#fa7c5c
+        style CHIR fill:#fa7c5c
         style Sema fill:#fa7c5c
     end
 
@@ -299,6 +300,7 @@ flowchart TB
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
 | `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. |
 | `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. |
+| `cangjie_compiler` - CHIR | (7) Translate `getPayload` intrinsic function call as a normal member field access, and `setExtern` intrinsic function call as a normal member field update.  |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
 No changes in the compiler backend or any specific OS-specific features.
