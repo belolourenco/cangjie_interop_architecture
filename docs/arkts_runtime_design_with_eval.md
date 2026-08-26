@@ -208,30 +208,7 @@ private enum ArkTSHandle {
 | `Ref` | a `JSHeapObject` | Heap values are pinned as a process-global so they survive across calls. |
 
 `JSValue` is `ark_interop`'s tagged engine value: either an immediate or a pointer into the
-heap. Three helpers move between an evaluated `Extern`, its handle, and a `JSValue`:
-
-```cangjie
-// Evaluated Extern<T> -> ArkTSHandle.
-private static func getHandle(e: Extern<T>): ArkTSHandle {
-    match (e) {
-        case Payload(payload) => (payload as ArkTSHandle).getOrThrow()
-        case _ => throw Exception("Expected an evaluated ArkTS value")
-    }
-}
-
-// ArkTSHandle -> evaluated Extern<T>.
-private static func extern(handle: ArkTSHandle): Extern<T> {
-    Payload(handle)
-}
-
-// ArkTSHandle -> JSValue.
-private static func jsValue(handle: ArkTSHandle): JSValue {
-    match (handle) {
-        case Imm(value) => value
-        case Ref(owner) => owner.toJSValue()
-    }
-}
-```
+heap.
 
 ### Wrapping a JSValue as an Extern
 
@@ -241,13 +218,13 @@ and wraps the resulting `ArkTSHandle` in `Payload`.
 
 ```cangjie
 private static func retain(value: JSValue): Extern<T> {
-    if (value.isFunction()) { return extern(Ref(value.asFunction())) }
-    if (value.isArray())   { return extern(Ref(value.asArray()))  }
-    if (value.isSymbol())  { return extern(Ref(value.asSymbol())) }
-    if (value.isString())  { return extern(Ref(value.asString())) }
-    if (value.isBigInt())  { return extern(Ref(value.asBigInt())) }
-    if (value.isObject())  { return extern(Ref(value.asObject())) }
-    extern(Imm(value))     // undefined / null / boolean / number: engine immediates
+    if (value.isFunction()) { return Payload(Ref(value.asFunction())) }
+    if (value.isArray())   { return Payload(Ref(value.asArray()))  }
+    if (value.isSymbol())  { return Payload(Ref(value.asSymbol())) }
+    if (value.isString())  { return Payload(Ref(value.asString())) }
+    if (value.isBigInt())  { return Payload(Ref(value.asBigInt())) }
+    if (value.isObject())  { return Payload(Ref(value.asObject())) }
+    Payload(Imm(value))     // undefined / null / boolean / number: engine immediates
 }
 ```
 
@@ -288,16 +265,23 @@ public static func eval(tree: Extern<T>): Extern<T> {
 
 private static func evalTree(tree: Extern<T>): JSValue {
     match (tree) {
-        case Payload(_) => jsValue(getHandle(tree))
+        case Payload(h) => match ((h as ArkTSHandle).getOrThrow()) {
+            case Imm(value) => value
+            case Ref(owner) => owner.toJSValue()
+        }
         case MemberAccess(target, field) =>
-            evalTree(target).getProperty(field)
+            let v1 = evalTree(target)
+            v1.getProperty(field)
         case IndexedAccess(target, index) =>
-            readIndex(evalTree(target), index)
+            let v1 = evalTree(target)
+            readIndex(v1, index)
         case MemberUpdate(target, field, value) =>
-            evalTree(target).setProperty(field, toJSValue(value))
+            let v1 = evalTree(target)
+            v1.setProperty(field, toJSValue(value))
             context.undefined().toJSValue()
         case IndexedUpdate(target, index, value) =>
-            writeIndex(evalTree(target), index, toJSValue(value))
+            let v1 = evalTree(target)
+            writeIndex(v1, index, toJSValue(value))
             context.undefined().toJSValue()
         case FuncCall(callee, arguments) =>
             call(callee, arguments)
@@ -470,23 +454,30 @@ projects the payload to a `JSValue`, then uses the `ark_interop` reader for targ
 ```cangjie
 public static func fromExtern<R>(e: Extern<T>): R {
     run {
-        let value = jsValue(getHandle(e))
-        match (None<R>) {    // dummy `None<R>` to match the type parameter
-            case _: Option<Bool>    => (value.toBoolean() as R).getOrThrow()
-            case _: Option<Int32>   => (Int32(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int32
-            case _: Option<Int64>   => (Int64(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int64
-            case _: Option<Float64> => (value.toNumber() as R).getOrThrow()
-            case _: Option<String>  => (value.toString() as R).getOrThrow()
-            case _: Option<BigInt>  => (value.toBigInt() as R).getOrThrow()
-            case _: Option<Unit> => (() as R).getOrThrow()
-            case _: Option<Array<String>> =>
-                let array = value.asArray()
-                let converted = Array<String>(array.size) { index =>
-                    array[index].toString()
+        match (e) {
+            case Payload(p) =>
+                let value = match ((p as ArkTSHandle).getOrThrow()) {
+                    case Imm(value) => value
+                    case Ref(owner) => owner.toJSValue()
                 }
-                (converted as R).getOrThrow()
-            case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
-            case _ => throw Exception("Unsupported conversion from ArkTS")
+                match (None<R>) {    // dummy `None<R>` to match the type parameter
+                    case _: Option<Bool>    => (value.toBoolean() as R).getOrThrow()
+                    case _: Option<Int32>   => (Int32(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int32
+                    case _: Option<Int64>   => (Int64(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int64
+                    case _: Option<Float64> => (value.toNumber() as R).getOrThrow()
+                    case _: Option<String>  => (value.toString() as R).getOrThrow()
+                    case _: Option<BigInt>  => (value.toBigInt() as R).getOrThrow()
+                    case _: Option<Unit> => (() as R).getOrThrow()
+                    case _: Option<Array<String>> =>
+                        let array = value.asArray()
+                        let converted = Array<String>(array.size) { index =>
+                            array[index].toString()
+                        }
+                        (converted as R).getOrThrow()
+                    case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
+                    case _ => throw Exception("Unsupported conversion from ArkTS")
+                }
+            case _ => throw Exception("Expected an evaluated ArkTS value")
         }
     }
 }
