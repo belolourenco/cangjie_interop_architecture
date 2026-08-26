@@ -958,7 +958,7 @@ public open class UserProfile {
 >         let obj = Runtime.object()
 >         obj.id = id
 >         obj.name = name
->         obj.address = address
+>         obj.address = address.toExtern()
 >         obj
 >     }
 >     

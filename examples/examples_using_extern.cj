@@ -1,4 +1,8 @@
+package ohos_app_cangjie_entry.examples_v1
 
+import ohos_app_cangjie_entry.arkts_runtime_v1.*
+
+// The examples below assume the following definition of ArkTS foreign runtime
 class ArkTSNotImplemented <: Exception {}
 
 open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
@@ -13,13 +17,12 @@ open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
     // needs to translate `(Extern<T>) -> Extern<T>` into `Extern<T>`
     // List<Runtime> requires conversion Array<String> to Extern
     public static func undefined(): Extern<T>                               { throw ArkTSNotImplemented() }
-    public static func getModule(_: String, _: ?String): Extern<T>          { throw ArkTSNotImplemented() }
+    public static func requireSystemNativeModule(_: String, _: ?String): Extern<T> { throw ArkTSNotImplemented() }
+    public static func requireArkModule(specifier: String): Extern<T>
     public static func object(): Extern<T>                                  { throw ArkTSNotImplemented() }
     public static func isUndefined(_: Extern<T>): Bool                      { throw ArkTSNotImplemented() }
     public static func global(): Extern<T>                                  { throw ArkTSNotImplemented() }
 }
-
-public class ArkTS1 <: ArkTS<ArkTS1> {}
 
 // ---------------------------------------------
 // 1. Helper functions defined in arkcompiler_cangjie_ark_interop/ohos/ark_interop_helper/ark_api_call_async.cj
@@ -37,9 +40,11 @@ public class ArkTS1 <: ArkTS<ArkTS1> {}
 
 func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
-    let jsModule = Runtime.getModule(moduleName, modulePrefix)
+    // let jsModule = Runtime.requireSystemNativeModule(moduleName, modulePrefix)
+    let jsModule = Runtime.requireArkModule(moduleName) // cannot be bothered to build a system native module and use the above ^^^^^^^
     let function = Runtime.memberAccess(jsModule, funcName)
-    let jsRet = function(args) // this will run on the main thread
+    let argsAny: Array<Any> = Array<Any>(args.size) { index => args[index] }
+    let jsRet = Runtime.functionCall(function, argsAny) // this will run on the main thread
     onResolve(jsRet)
 }
 
@@ -57,7 +62,7 @@ func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Ar
 //     hmsGlobalApiCall<T>(moduleName, funcName, args) {ctx, info => T.fromJSValue(ctx, info)}
 // }
 
-func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): T where Runtime <: ArkTS<Runtime> {
     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => (T)res }
 }
 
@@ -74,7 +79,7 @@ func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Ar
 // }
 
 public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
-    hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ info: Extern<Runtime> =>
+    hmsGlobalApiCall<Runtime, Unit>( "entry/src/main/ets/poc/ExternDeclarationFixtures", "greeter", [{ info: Extern<Runtime> =>
             let p0: String = (String)info[0]
             fn(p0)
             Runtime.undefined()
@@ -82,7 +87,7 @@ public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: Ark
 }
 
 public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
-    let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+    let jsModule = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
     let efn: Extern<Runtime> = { arg: Extern<Runtime> =>
         let p0 = (String)arg[0]
         fn(p0)
@@ -100,11 +105,11 @@ public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: Ar
 // }
 
 public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
-    hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+    hmsGlobalApiCall <Runtime, Unit >( "entry/src/main/ets/poc/ExternDeclarationFixtures", "printToConsole", [s])
 }
 
 public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
-    let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+    let jsModule = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
     let res = jsModule.printToConsole(s) // implicit conversion String -> Extern<Runtime>
     (Unit)res
 }
@@ -119,13 +124,13 @@ public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Run
 // }
 
 public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
-    hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+    hmsGlobalApiCall <Runtime, T >( "entry/src/main/ets/poc/ExternDeclarationFixtures", "testMultiGenericT", [t, m]) {
         res: Extern<Runtime> => (T)res
     }
 }
 
 public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
-    let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+    let jsModule = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
     let res = jsModule.testMultiGenericT(t, m) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
     (T)res
 }
@@ -868,7 +873,7 @@ public open class UserProfile<Runtime> where Runtime <: ArkTS<Runtime>  {
         let obj = Runtime.object()
         obj.id = id
         obj.name = name
-        obj.address = address
+        obj.address = address.toExtern()
         obj
     }
     
@@ -963,7 +968,7 @@ public enum GreetingLike<Runtime> where Runtime <: ArkTS<Runtime>  {
 
 public class Greeter<Runtime> where Runtime <: ArkTS<Runtime> {
 
-    protected Greeter(let arkts_object: Extern<Runtime>) {}
+    protected Greeter(_: Unit, let arkts_object: Extern<Runtime>) {}
     /**
     * @brief constructor(greeting: string): void
     */
@@ -995,7 +1000,7 @@ public class Greeter<Runtime> where Runtime <: ArkTS<Runtime> {
     }
 
     static func fromExtern (input: Extern<Runtime>): Greeter<Runtime> {
-        Greeter(input)
+        Greeter((), input)
     }
 }
 
@@ -1047,11 +1052,13 @@ public class MathUtils<Runtime> where Runtime <: ArkTS<Runtime>  {
     // Static property
     public mut prop PI: Float64 {
         get() {
-            let module = Runtime.getModule("test", None)
+            // let module = Runtime.requireSystemNativeModule("test", None)
+            let module = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
             (Float64)module.MathUtils.PI
         }
         set(v) {
-            let module = Runtime.getModule("test", None)
+            // let module = Runtime.requireSystemNativeModule("test", None)
+            let module = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
             module.MathUtils.PI = v
         }
 
@@ -1061,7 +1068,8 @@ public class MathUtils<Runtime> where Runtime <: ArkTS<Runtime>  {
     * @brief square(x: number): number
     */
     public static func square(x: Float64): Float64 {
-        let module = Runtime.getModule("test", None)
+        // let module = Runtime.requireSystemNativeModule("test", None)
+        let module = Runtime.requireArkModule("entry/src/main/ets/poc/ExternDeclarationFixtures")
         (Float64)module.MathUtils.square(x)
     }
 
@@ -1136,9 +1144,9 @@ public class AnimalProtect<Runtime> where Runtime <: ArkTS<Runtime>  {
 // #### Generic Members
 // ---------------------------------------------
 
-// public class Box<T> {
+// public class BBox<T> {
 
-//     protected Box(let arkts_object: JSObject) {}
+//     protected BBox(let arkts_object: JSObject) {}
 
 //     // Property
 //     public mut prop value: T {
@@ -1168,14 +1176,14 @@ public class AnimalProtect<Runtime> where Runtime <: ArkTS<Runtime>  {
 //         arkts_object.toJSValue()
 //     }
 
-//     static func fromJSValue <T>(context: JSContext, input: JSValue): Box<T> {
-//         Box(input.asObject())
+//     static func fromJSValue <T>(context: JSContext, input: JSValue): BBox<T> {
+//         BBox(input.asObject())
 //     }
 // }
 
-public class Box<Runtime, T> where Runtime <: ArkTS<Runtime>  {
+public class BBox<Runtime, T> where Runtime <: ArkTS<Runtime>  {
 
-    protected Box(let arkts_object: Extern<Runtime>) {}
+    protected BBox(let arkts_object: Extern<Runtime>) {}
 
     // Property
     public mut prop value: T {
