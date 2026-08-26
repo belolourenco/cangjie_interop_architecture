@@ -86,6 +86,12 @@ the context for that specialization. The evaluator and helpers read it through t
 `context` property, which throws if the runtime was never bound.
 
 ```cangjie
+public class ArkTSContextNotBoundException <: Exception {
+    public ArkTSContextNotBoundException(message: String) {
+        super(message)
+    }
+}
+
 abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
     private static var context_: ?JSContext = None
 
@@ -97,7 +103,8 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
         get() {
             match (context_) {
                 case Some(context) => context
-                case None => throw Exception("ArkTS is not associated with a host JSContext")
+                case None => throw ArkTSContextNotBoundException(
+                    "ArkTS is not associated with a host JSContext")
             }
         }
     }
@@ -305,7 +312,7 @@ private static func readIndex(target: JSValue, index: Any): JSValue {
         case propertyName: String => target.getProperty(propertyName)
         case externalIndex: Extern<T> =>
             target.getProperty(toJSKeyable(externalIndex))
-        case _ => throw Exception("Unsupported ArkTS index type")
+        case _ => throw ExternIndexedAccessException("Unsupported ArkTS index type")
     }
 }
 
@@ -317,7 +324,7 @@ private static func writeIndex(target: JSValue, index: Any, value: Any): Unit {
         case externalIndex: Extern<T> =>
             let key = toJSKeyable(externalIndex)
             target.setProperty(key, toJSValue(value))
-        case _ => throw Exception("Unsupported ArkTS index type")
+        case _ => throw ExternIndexedAccessException("Unsupported ArkTS index type")
     }
 }
 
@@ -332,7 +339,7 @@ private static func toJSKeyable(index: Extern<T>): JSKeyable {
                         case _ => owner.toJSValue().toString()
                     }
             }
-        case _ => throw Exception("Expected an evaluated ArkTS index")
+        case _ => throw ExternIndexedAccessException("Expected an evaluated ArkTS index")
     }
 }
 ```
@@ -415,7 +422,7 @@ private static func toJSValue(value: Any): JSValue {
                     case Imm(value) => value
                     case Ref(owner) => owner.toJSValue()
                 }
-            case _ => throw Exception("Expected an evaluated ArkTS value")
+            case _ => throw ExternConversionException("Expected an evaluated ArkTS value")
         }
     }
     if (value is (Extern<T>) -> Extern<T>) {
@@ -438,7 +445,7 @@ private static func toJSValue(value: Any): JSValue {
     if (value is Array<Bool>)          { return arrayJSValue((value as Array<Bool>).getOrThrow()) }
     if (value is Array<String>)        { return arrayJSValue((value as Array<String>).getOrThrow()) }
     if (value is Array<Extern<T>>)     { return arrayJSValue((value as Array<Extern<T>>).getOrThrow()) }
-    throw Exception("Unsupported conversion to ArkTS")
+    throw ExternConversionException("Unsupported conversion to ArkTS")
 }
 ```
 
@@ -498,9 +505,10 @@ public static func fromExtern<R>(e: Extern<T>): R {
                         }
                         (converted as R).getOrThrow()
                     case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
-                    case _ => throw Exception("Unsupported conversion from ArkTS")
+                    case _ => throw ExternConversionException(
+                        "Unsupported conversion from ArkTS")
                 }
-            case _ => throw Exception("Expected an evaluated ArkTS value")
+            case _ => throw ExternConversionException("Expected an evaluated ArkTS value")
         }
     }
 }

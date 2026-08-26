@@ -46,6 +46,12 @@ In this snippet `api.createRectangle()` and `blob.width = ...` are desugared as 
 `JSContext` is the ark_interop handle to one ArkTS/JS engine instance. Each concrete specialization can be bound to its own context. This permits multiple ArkTS foreign runtimes, for example `ArkTS1 <: ArkTS<ArkTS1>` and `ArkTS2 <: ArkTS<ArkTS2>`, without mixing their `Extern` values: `Extern<ArkTS1>` and `Extern<ArkTS2>` are different types. `bind` installs the context for that runtime specialization. Every operation reads it through the private `context` property, which throws an exception if that runtime was never bound.
 
 ```cangjie
+public class ArkTSContextNotBoundException <: Exception {
+    public ArkTSContextNotBoundException(message: String) {
+        super(message)
+    }
+}
+
 abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
     private static var context_: ?JSContext = None
 
@@ -57,7 +63,8 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
         get() {
             match (context_) {
                 case Some(context) => context
-                case None => throw Exception("ArkTS is not associated with a host JSContext")
+                case None => throw ArkTSContextNotBoundException(
+                    "ArkTS is not associated with a host JSContext")
             }
         }
     }
@@ -243,7 +250,7 @@ public static func indexedAccess(e: Extern<T>, index: Any): Extern<T> {
                 }
             case externalIndex: Extern<T> =>
                 // ...
-            case _ => throw Exception("Unsupported ArkTS index type")
+            case _ => throw ExternIndexedAccessException("Unsupported ArkTS index type")
         }
     }
 }
@@ -273,7 +280,7 @@ public static func indexedUpdate(e: Extern<T>, index: Any, value: Any): Unit {
                 target.setProperty(propertyName, converted)
             case externalIndex: Extern<T> =>
                 // ....
-            case _ => throw Exception("Unsupported ArkTS index type")
+            case _ => throw ExternIndexedAccessException("Unsupported ArkTS index type")
         }
     }
 }
@@ -301,7 +308,8 @@ public static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T> {
                 retain(owner.toJSValue().asFunction().call(
                     converted, thisArg: context.undefined().toJSValue()))           // plain function: this = undefined
             case Imm(_) =>
-                throw Exception("Cannot call an ArkTS immediate value")             // numbers/booleans aren't callable
+                throw ExternFunctionAccessException(
+                    "Cannot call an ArkTS immediate value")                         // numbers/booleans aren't callable
         }
     }
 }
@@ -358,7 +366,7 @@ private static func toJSValue(value: Any): JSValue {
     if (value is Array<Bool>)          { return arrayJSValue((value as Array<Bool>).getOrThrow()) }
     if (value is Array<String>)        { return arrayJSValue((value as Array<String>).getOrThrow()) }
     if (value is Array<Extern<T>>)     { return arrayJSValue((value as Array<Extern<T>>).getOrThrow()) }
-    throw Exception("Unsupported conversion to ArkTS")
+    throw ExternConversionException("Unsupported conversion to ArkTS")
 }
 ```
 
@@ -407,7 +415,7 @@ public static func fromExtern<R>(e: Extern<T>): R {
                 }
                 (converted as R).getOrThrow()
             case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
-            case _ => throw Exception("Unsupported conversion from ArkTS")
+            case _ => throw ExternConversionException("Unsupported conversion from ArkTS")
         }
     }
 }
