@@ -1,7 +1,7 @@
 # Proposal: `ForeignRuntime.eval` + `ExternExpTree`
 
-Collapse the dynamic `ForeignRuntime` operations into one entry point that receives the
-whole expression as a tree. Cangjie code in [here](../examples/runtime_with_eval_and_ExternExpTree.cj).
+Represent dynamic `ForeignRuntime` operations through a single entry point that receives
+the complete expression tree. See the complete Cangjie code [here](../examples/runtime_with_eval_and_ExternExpTree.cj).
 
 ## Interface
 
@@ -23,10 +23,9 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-`MemberUpdate` / `IndexedUpdate` perform the write and return a runtime-defined result
-(e.g. `undefined`). Leaves and call/index operands that are ordinary Cangjie values stay
-`Any` (same as today’s `functionCall` / `indexedAccess` args) and are converted inside
-`eval` via `toExtern` when needed.
+Ordinary Cangjie values used as call arguments, indexes, or assigned
+values remain `Any`, as they are in the current API; `eval` is responsible to convert
+them when necessary.
 
 ## Desugaring
 
@@ -61,17 +60,18 @@ x(20)
 
 ## Why this helps
 
-- **Lifetime:** one `eval` can open a single scope for intermediates and promote only what
-  escapes (e.g. the final `Extern`).
-- **Method `this`:** `FuncCall(MemberAccess(a, "m"), ...)` keeps the receiver in the tree; a bare
-  `FuncCall(Value(x), ...)` does not — matching JS call-site rules.
-- **Batching:** a `MemberAccess` chain can be lowered to one path-capable FFI call instead of N
-  `ARKTS_GetProperty`s.
+- **Lifetime management:** one `eval` call can use a single scope for intermediate values
+  and promote only the final `Extern` that escapes. See [issue](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/issue_with_current_extern_interface.md#problem-1-two-lifetime-modes-in-ohosark_interop).
+- **Method receivers:** `FuncCall(MemberAccess(a, "m"), ...)` preserves the receiver in the
+  tree, while `FuncCall(Value(x), ...)` does not. This allows us to capture the JavaScript call-site rules. See [issue](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/issue_with_current_extern_interface.md#problem-2-hard-to-capture-js-semantics-on-method-call).
+- **Batching:** a `MemberAccess` chain can become one path-based FFI call instead of several
+  `ARKTS_GetProperty` calls. See [issue](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/issue_with_current_extern_interface.md#problem-2-hard-to-capture-js-semantics-on-method-call).
 
 ## Alternative: `Extern` is the tree
 
-Drop `ExternExpTree`. Make `Extern` itself the recursive enum; the leaf is `Payload(Any)`
-instead of `Value(Extern<T>)`. Cangjie code in [here](../examples/runtime_with_eval_and_ExternAsATree.cj).
+Eliminate `ExternExpTree` and make `Extern` the recursive enum. Its leaf becomes
+`Payload(Any)` rather than `Value(Extern<T>)`. See the
+[Cangjie code](../examples/runtime_with_eval_and_ExternAsATree.cj).
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
@@ -91,8 +91,8 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-Desugaring builds nested `Extern` nodes directly; `eval` reduces a tree to a concrete
-`Payload` (or an evaluated result).
+Desugaring builds nested `Extern` nodes directly. `eval` then reduces the tree to a
+concrete `Payload`, or to another runtime-defined evaluated result.
 
 ```cangjie
 e.f
@@ -123,14 +123,18 @@ x(20)
 //   T.eval(FuncCall(x, [20]))
 ```
 
-Same benefits as above; no parallel tree type and no `Value(...)` wrapper around existing
-handles.
+This design has the same benefits as the primary proposal, without a parallel tree type or
+a `Value(...)` wrapper around existing handles. Its main cost is that it changes the
+representation of `Extern`.
 
-## Optional 1: Keep current operations
+## Option: keep the current operations
 
-The proposal that introduces a `ExternExpTree` is compatible as an extension to the current operations `memberAccess`, `indexedAccess`, `toExtern`, etc. We can define the function `eval` resorting to the other static functions. The foreign runtime implementer can opt to simply implement `memberAccess`, `indexedAccess`, `memberUpdate`, `indexedUpdate`, `functionCall`, `fromExtern`, `toExtern` and leave the `eval` function as defined below.
+`ExternExpTree` can be added without removing the current operations. A default `eval`
+implementation can recursively interpret the tree by calling those operations, allowing
+existing runtime implementations to adopt the API without implementing an optimized
+evaluator immediately.
 
-Cangjie code in [here](../examples/runtime_with_eval_and_ExternExpTree_extended.cj).
+See the complete Cangjie code [here](../examples/runtime_with_eval_and_ExternExpTree_extended.cj).
 
 ```cangjie
 public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
@@ -159,7 +163,7 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
                 return toExtern(memberUpdate(e, field, value))
             case IndexedUpdate(t, idx, value) =>
                 let e = eval(t)
-                toExtern(indexedUpdate(e, idx, value))
+                return toExtern(indexedUpdate(e, idx, value))
             case FuncCall(t, args) =>
                 let e = eval(t)
                 return functionCall(e, args)
@@ -168,64 +172,16 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-The same idea is also possible when the `Extern` is itself the tree, however that already breaks compatibility due to the changes to `Extern` itself.
+The same fallback is possible when `Extern` is the tree: replace `Value(e)` with
+`Payload(e)` and have that case return its input. Changing the representation of `Extern`
+still breaks compatibility. See the
+complete Cangjie code [here](../examples/runtime_with_eval_and_ExternAsATree_extended.cj).
 
-Cangjie code in [here](../examples/runtime_with_eval_and_ExternAsATree_extended.cj).
+## Evolution option: make `Extern` non-exhaustive
 
-```cangjie
-public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
-    static func memberAccess(e: Extern<T>, field: String): Extern<T>
-    static func indexedAccess(e: Extern<T>, arg: Any): Extern<T>
-
-    static func memberUpdate(e: Extern<T>, field: String, value: Any) : Unit
-    static func indexedUpdate(e: Extern<T>, field: Any, value: Any): Unit
-
-    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
-
-    static func fromExtern<R>(h: Extern<T>): R
-    static func toExtern<R>(v: R): Extern<T>
-
-    static func eval(t: Extern<T>): Extern<T> {
-        match (t) {
-            case Payload(e) => return t
-            case MemberAccess(t, field) =>
-                let e = eval(t)
-                return memberAccess(e, field)
-            case IndexedAccess(t, idx) =>
-                let e = eval(t)
-                return indexedAccess(e, idx)
-            case MemberUpdate(t, field, value) =>
-                let e = eval(t)
-                return toExtern(memberUpdate(e, field, value))
-            case IndexedUpdate(t, idx, value) =>
-                let e = eval(t)
-                toExtern(indexedUpdate(e, idx, value))
-            case FuncCall(t, args) =>
-                let e = eval(t)
-                return functionCall(e, args)
-        }
-    }
-}
-```
-
-## Optional 2: Define enum Extern as non-exhaustive
-
-In this section we focus on the case in which `Extern` is defined as a tree, but the same idea applies to `ExternExpTree`.
-
-The operations in the enum below are the primitive operations and any foreign runtime must implement them.
-
-```cangjie
-public enum Extern<T> where T <: ForeignRuntime<T> {
-    | Payload(Any)
-    | MemberAccess(Extern<T>, String)
-    | IndexedAccess(Extern<T>, Any)
-    | MemberUpdate(Extern<T>, String, Any)
-    | IndexedUpdate(Extern<T>, Any, Any)
-    | FuncCall(Extern<T>, Array<Any>)
-}
-```
-
-However we can keep `Extern` as non-exhaustive such that it can be extended later without breaking backward compatibility.
+This section uses the alternative design in which `Extern` is the tree, but the same
+approach applies to `ExternExpTree`. Declaring the enum non-exhaustive leaves room for
+future operations without making every extension a compatibility-breaking change:
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
@@ -239,7 +195,9 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-Additionally we might introduce an new operation `eval_unsupported` that can later be expanded to deal with newly added operations if they are not handled by the concrete runtime. Basically we define `ForeignRuntime<T>` as below. Note that we also add a new exception `ExternUnsupportedOperation` to report operations that are currently not supported.
+The interface can also provide a default `eval_unsupported` fallback. Runtime
+implementations can delegate unrecognized tree nodes to it. Initially, the fallback reports
+an unsupported operation; it can later interpret new nodes in terms of older primitives.
 
 ```cangjie
 private class ExternUnsupportedOperation <: Exception {}
@@ -248,7 +206,7 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 
     static func fromExtern<R>(h: Extern<T>): R
     static func toExtern<R>(v: R): Extern<T>
-    
+
     static func eval(t: Extern<T>): Extern<T> {
         eval_unsupported(t)
     }
@@ -259,38 +217,40 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-Any runtime implementer must call the `eval_unsupported` in the default case of the eval function.
+Runtime implementations should delegate the default case of `eval` to
+`eval_unsupported`:
 
 ```cangjie
 public class ArkTS <: ForeignRuntime<ArkTS> {
-  
-  static func fromExtern<R>(h: Extern<T>): R { ... }
-  static func toExtern<R>(v: R): Extern<T> { ... }
 
-  static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
-      match (t) {
-          case Payload(e) => ...
-          case MemberAccess(t, field) => ...
-          case IndexedAccess(t, idx) => ...
-          case MemberUpdate(t, field, value) => ...
-          case IndexedUpdate(t, idx, value) => ...
-          case FuncCall(t, args) => ...
-          case _ => eval_unsupported(t)
-      }
-  }
+    static func fromExtern<R>(h: Extern<ArkTS>): R { ... }
+    static func toExtern<R>(v: R): Extern<ArkTS> { ... }
+
+    static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
+        match (t) {
+            case Payload(e) => ...
+            case MemberAccess(t, field) => ...
+            case IndexedAccess(t, idx) => ...
+            case MemberUpdate(t, field, value) => ...
+            case IndexedUpdate(t, idx, value) => ...
+            case FuncCall(t, args) => ...
+            case _ => eval_unsupported(t)
+        }
+    }
 }
 ```
 
-This way, if the `Extern` enum is extended to support new optimizations in the compiler we won't necessarily break backward compatibility in the implemented runtimes. For instance, assume we decide to implement a new optimization to sequencing of operations, e.g.
+When followed, this convention lets the compiler add optimizable operations without
+necessarily breaking existing runtimes. For example, consider two expressions evaluated
+in sequence:
 
 ```cangjie
-// assume e1: Extern<T>
-// assume e2: Extern<T>
-let e1.a = e2.foo() // desugared as T.eval(MemberUpdate(e1, "a", FuncCall(MemberAccess(e2, "foo"), [])))
-e1.a                // desugared as T.eval(MemberAccess(e1, "a"))
+// e1: Extern<T>, e2: Extern<T>
+e1.a = e2.foo()
+e1.a
 ```
 
-We can introduce a new constructor `Seq`
+A later API version could add a `Seq` node:
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
@@ -300,12 +260,12 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
     | MemberUpdate(Extern<T>, String, Any)
     | IndexedUpdate(Extern<T>, Any, Any)
     | FuncCall(Extern<T>, Array<Any>)
-    | Seq(Extern<T>, Extern<T>)                        // <==== new Constructor
+    | Seq(Extern<T>, Extern<T>)
     | ...
 }
 ```
 
-And implement the desugaring of this particular constructor in terms of the primitive operations
+The default fallback can interpret `Seq` in terms of existing operations:
 
 ```cangjie
 private class ExternUnsupportedOperation <: Exception {}
@@ -314,7 +274,7 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 
     static func fromExtern<R>(h: Extern<T>): R
     static func toExtern<R>(v: R): Extern<T>
-    
+
     static func eval(t: Extern<T>): Extern<T> {
         eval_unsupported(t)
     }
@@ -330,36 +290,37 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-This way, even if the compiler starts desugaring code to the new `Seq` constructor, previously implemented foreign runtimes that followed the policy of calling `eval_unsupported` in the `eval` default case will continue working as expected.
+Runtimes that follow this convention inherit the new fallback behavior when the compiler
+starts emitting `Seq`:
 
 ```cangjie
-// assume e1: Extern<T>
-// assume e2: Extern<T>
-let e1.a = e2.foo()
+// e1: Extern<T>, e2: Extern<T>
+e1.a = e2.foo()
 e1.a
-// desugared as T.eval(Seq(T.eval(MemberUpdate(e1, "a", FuncCall(MemberAccess(e2, "foo"), []))), T.eval(MemberAccess(e1, "a"))))
+// → T.eval(Seq(
+//       MemberUpdate(e1, "a", FuncCall(MemberAccess(e2, "foo"), [])),
+//       MemberAccess(e1, "a")))
 ```
 
-
-The runtime implementation can later be refined to support the new operation
+A runtime can later optimize the operation by handling `Seq` directly:
 
 ```cangjie
 public class ArkTS <: ForeignRuntime<ArkTS> {
-  
-  static func fromExtern<R>(h: Extern<T>): R { ... }
-  static func toExtern<R>(v: R): Extern<T> { ... }
 
-  static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
-      match (t) {
-          case Payload(e) => ...
-          case MemberAccess(t, field) => ...
-          case IndexedAccess(t, idx) => ...
-          case MemberUpdate(t, field, value) => ...
-          case IndexedUpdate(t, idx, value) => ...
-          case FuncCall(t, args) => ...
-          case Seq(e1, e2) => ...
-          case _ => eval_unsupported(t)
-      }
-  }
+    static func fromExtern<R>(h: Extern<ArkTS>): R { ... }
+    static func toExtern<R>(v: R): Extern<ArkTS> { ... }
+
+    static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
+        match (t) {
+            case Payload(e) => ...
+            case MemberAccess(t, field) => ...
+            case IndexedAccess(t, idx) => ...
+            case MemberUpdate(t, field, value) => ...
+            case IndexedUpdate(t, idx, value) => ...
+            case FuncCall(t, args) => ...
+            case Seq(e1, e2) => ...
+            case _ => eval_unsupported(t)
+        }
+    }
 }
 ```
