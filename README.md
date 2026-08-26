@@ -13,6 +13,7 @@ Design notes and Cangjie examples for foreign-runtime interoperability.
 
 ## Examples
 
+- [Current `ForeignRuntime` and `Extern` implementation](examples/extern_runtime.cj)
 - [Using Extern](examples/examples_using_extern.cj)
 - [Extern expression tree](examples/runtime_with_eval_and_ExternExpTree.cj) ([extended](examples/runtime_with_eval_and_ExternExpTree_extended.cj))
 - [Extern as a tree](examples/runtime_with_eval_and_ExternAsATree.cj) ([extended](examples/runtime_with_eval_and_ExternAsATree_extended.cj), [variant](examples/runtime_with_eval_and_ExternAsATree_variant.cj))

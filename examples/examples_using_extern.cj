@@ -2,6 +2,9 @@ package ohos_app_cangjie_entry.examples_v1
 
 import ohos_app_cangjie_entry.arkts_runtime_v1.*
 
+// The original examples below are reproduced as shown in:
+// https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cj-dts2cj-translation-rules.md
+
 // The examples below assume the following definition of ArkTS foreign runtime
 class ArkTSNotImplemented <: Exception {}
 
