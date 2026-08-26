@@ -126,7 +126,7 @@ x(20)
 Same benefits as above; no parallel tree type and no `Value(...)` wrapper around existing
 handles.
 
-## Optional: Keep current operations
+## Optional 1: Keep current operations
 
 The proposal that introduces a `ExternExpTree` is compatible as an extension to the current operations `memberAccess`, `indexedAccess`, `toExtern`, etc. We can define the function `eval` resorting to the other static functions. The foreign runtime implementer can opt to simply implement `memberAccess`, `indexedAccess`, `memberUpdate`, `indexedUpdate`, `functionCall`, `fromExtern`, `toExtern` and leave the `eval` function as defined below.
 
@@ -205,5 +205,161 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
                 return functionCall(e, args)
         }
     }
+}
+```
+
+## Optional 2: Define enum Extern as non-exhaustive
+
+In this section we focus on the case in which `Extern` is defined as a tree, but the same idea applies to `ExternExpTree`.
+
+The operations in the enum below are the primitive operations and any foreign runtime must implement them.
+
+```cangjie
+public enum Extern<T> where T <: ForeignRuntime<T> {
+    | Payload(Any)
+    | MemberAccess(Extern<T>, String)
+    | IndexedAccess(Extern<T>, Any)
+    | MemberUpdate(Extern<T>, String, Any)
+    | IndexedUpdate(Extern<T>, Any, Any)
+    | FuncCall(Extern<T>, Array<Any>)
+}
+```
+
+However we can keep `Extern` as non-exhaustive such that it can be extended later without breaking backward compatibility.
+
+```cangjie
+public enum Extern<T> where T <: ForeignRuntime<T> {
+    | Payload(Any)
+    | MemberAccess(Extern<T>, String)
+    | IndexedAccess(Extern<T>, Any)
+    | MemberUpdate(Extern<T>, String, Any)
+    | IndexedUpdate(Extern<T>, Any, Any)
+    | FuncCall(Extern<T>, Array<Any>)
+    ...
+}
+```
+
+Additionally we might introduce an new operation `eval_unsupported` that can later be expanded to deal with newly added operations if they are not handled by the concrete runtime. Basically we define `ForeignRuntime<T>` as below. Note that we also add a new exception `ExternUnsupportedOperation` to report operations that are currently not supported.
+
+```cangjie
+private class ExternUnsupportedOperation <: Exception {}
+
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
+    
+    static func eval(t: Extern<T>): Extern<T> {
+        eval_unsupported(t)
+    }
+
+    static func eval_unsupported(t: Extern<T>): Extern<T> {
+        throw ExternUnsupportedOperation()
+    }
+}
+```
+
+Any runtime implementer must call the `eval_unsupported` in the default case of the eval function.
+
+```cangjie
+public class ArkTS <: ForeignRuntime<ArkTS> {
+  
+  static func fromExtern<R>(h: Extern<T>): R { ... }
+  static func toExtern<R>(v: R): Extern<T> { ... }
+
+  static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
+      match (t) {
+          case Payload(e) => ...
+          case MemberAccess(t, field) => ...
+          case IndexedAccess(t, idx) => ...
+          case MemberUpdate(t, field, value) => ...
+          case IndexedUpdate(t, idx, value) => ...
+          case FuncCall(t, args) => ...
+          case _ => eval_unsupported(t)
+      }
+  }
+}
+```
+
+This way, if the `Extern` enum is extended to support new optimizations in the compiler we won't necessarily break backward compatibility in the implemented runtimes. For instance, assume we decide to implement a new optimization to sequencing of operations, e.g.
+
+```cangjie
+// assume e1: Extern<T>
+// assume e2: Extern<T>
+let e1.a = e2.foo() // desugared as T.eval(MemberUpdate(e1, "a", FuncCall(MemberAccess(e2, "foo"), [])))
+e1.a                // desugared as T.eval(MemberAccess(e1, "a"))
+```
+
+We can introduce a new constructor `Seq`
+
+```cangjie
+public enum Extern<T> where T <: ForeignRuntime<T> {
+    | Payload(Any)
+    | MemberAccess(Extern<T>, String)
+    | IndexedAccess(Extern<T>, Any)
+    | MemberUpdate(Extern<T>, String, Any)
+    | IndexedUpdate(Extern<T>, Any, Any)
+    | FuncCall(Extern<T>, Array<Any>)
+    | Seq(Extern<T>, Extern<T>)                        // <==== new Constructor
+    | ...
+}
+```
+
+And implement the desugaring of this particular constructor in terms of the primitive operations
+
+```cangjie
+private class ExternUnsupportedOperation <: Exception {}
+
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
+    
+    static func eval(t: Extern<T>): Extern<T> {
+        eval_unsupported(t)
+    }
+
+    static func eval_unsupported(t: Extern<T>): Extern<T> {
+        match(t) {
+            case Seq(e1, e2) =>
+                let _ = eval(e1)
+                return eval(e2)
+            case _ => throw ExternUnsupportedOperation()
+        }
+    }
+}
+```
+
+This way, even if the compiler starts desugaring code to the new `Seq` constructor, previously implemented foreign runtimes that followed the policy of calling `eval_unsupported` in the `eval` default case will continue working as expected.
+
+```cangjie
+// assume e1: Extern<T>
+// assume e2: Extern<T>
+let e1.a = e2.foo()
+e1.a
+// desugared as T.eval(Seq(T.eval(MemberUpdate(e1, "a", FuncCall(MemberAccess(e2, "foo"), []))), T.eval(MemberAccess(e1, "a"))))
+```
+
+
+The runtime implementation can later be refined to support the new operation
+
+```cangjie
+public class ArkTS <: ForeignRuntime<ArkTS> {
+  
+  static func fromExtern<R>(h: Extern<T>): R { ... }
+  static func toExtern<R>(v: R): Extern<T> { ... }
+
+  static func eval(t: Extern<ArkTS>): Extern<ArkTS> {
+      match (t) {
+          case Payload(e) => ...
+          case MemberAccess(t, field) => ...
+          case IndexedAccess(t, idx) => ...
+          case MemberUpdate(t, field, value) => ...
+          case IndexedUpdate(t, idx, value) => ...
+          case FuncCall(t, args) => ...
+          case Seq(e1, e2) => ...
+          case _ => eval_unsupported(t)
+      }
+  }
 }
 ```
