@@ -125,3 +125,81 @@ x(20)
 
 Same benefits as above; no parallel tree type and no `Value(...)` wrapper around existing
 handles.
+
+## Optional: Keep current operations
+
+The proposal that introduces a `ExternExpTree` is compatible as an extension to the current operations `memberAccess`, `indexedAccess`, `toExtern`, etc. We can define the function `eval` resorting to the other static functions. The foreign runtime implementer can opt to simply implement `memberAccess`, `indexedAccess`, `memberUpdate`, `indexedUpdate`, `functionCall`, `fromExtern`, `toExtern` and leave the `eval` function as defined below.
+
+```cangjie
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+    static func memberAccess(e: Extern<T>, field: String): Extern<T>
+    static func indexedAccess(e: Extern<T>, arg: Any): Extern<T>
+
+    static func memberUpdate(e: Extern<T>, field: String, value: Any) : Unit
+    static func indexedUpdate(e: Extern<T>, field: Any, value: Any): Unit
+
+    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
+
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
+
+    static func eval(externExpTree: ExternExpTree<T>): Extern<T> {
+        match (externExpTree) {
+            case Value(e) => return e
+            case MemberAccess(t, field) =>
+                let e = eval(t)
+                return memberAccess(e, field)
+            case IndexedAccess(t, idx) =>
+                let e = eval(t)
+                return indexedAccess(e, idx)
+            case MemberUpdate(t, field, value) =>
+                let e = eval(t)
+                return toExtern(memberUpdate(e, field, value))
+            case IndexedUpdate(t, idx, value) =>
+                let e = eval(t)
+                toExtern(indexedUpdate(e, idx, value))
+            case FuncCall(t, args) =>
+                let e = eval(t)
+                return functionCall(e, args)
+        }
+    }
+}
+```
+
+The same idea is also possible when the `Extern` is itself the tree, however that already breaks compatibility due to the changes to `Extern` itself.
+
+```cangjie
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+    static func memberAccess(e: Extern<T>, field: String): Extern<T>
+    static func indexedAccess(e: Extern<T>, arg: Any): Extern<T>
+
+    static func memberUpdate(e: Extern<T>, field: String, value: Any) : Unit
+    static func indexedUpdate(e: Extern<T>, field: Any, value: Any): Unit
+
+    static func functionCall(e: Extern<T>, args: Array<Any>): Extern<T>
+
+    static func fromExtern<R>(h: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
+
+    static func eval(t: Extern<T>): Extern<T> {
+        match (t) {
+            case Payload(e) => return t
+            case MemberAccess(t, field) =>
+                let e = eval(t)
+                return memberAccess(e, field)
+            case IndexedAccess(t, idx) =>
+                let e = eval(t)
+                return indexedAccess(e, idx)
+            case MemberUpdate(t, field, value) =>
+                let e = eval(t)
+                return toExtern(memberUpdate(e, field, value))
+            case IndexedUpdate(t, idx, value) =>
+                let e = eval(t)
+                toExtern(indexedUpdate(e, idx, value))
+            case FuncCall(t, args) =>
+                let e = eval(t)
+                return functionCall(e, args)
+        }
+    }
+}
+```
