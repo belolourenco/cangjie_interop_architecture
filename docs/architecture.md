@@ -390,7 +390,7 @@ public struct Extern<T> where T <: ForeignRuntime<T> {
 | --- | --- |
 | `(U)e` | Succeeds if `e: Extern<T>` and `U` a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
 | `e` where `Extern<T>` expected | Always succeeds; either `e` is already `Extern<T>` or it is desugared into `T.toExtern<U>(e)` if `e: U` and `U ≠ Extern<T>` |
-| `e.f`, `e[i]`, `e(…)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or arguments |
+| `e.f`, `e[i]`, `e(...)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or arguments |
 | `e.f = v`, `e[i] = v` when `e: Extern<T>` | Result type is `Unit`; no check on `f`, `i`, or `v` |
 
 #### Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
@@ -434,7 +434,7 @@ Let `e: Extern<T>`. Then:
 | `e.f = v` | `T.memberUpdate(e, "f", v)` |
 | `e[i]` | `T.indexedAccess(e, i)` |
 | `e[i] = v` | `T.indexedUpdate(e, i, v)` |
-| `e(a, b, …)` | `T.functionCall(e, [a, b, …])` |
+| `e(a, b, ...)` | `T.functionCall(e, [a, b, ...])` |
 
 #### Clarifications on assignment
 

@@ -71,14 +71,15 @@ That collapses `ark_interop`’s cheap path into the expensive one:
 
 ```cangjie
 let x = obj.a.b.c
-// each of a, b, c (if heap-typed) → ARKTS_CreateGlobal
+// desugared into T.memberAccess(T.memberAccess(T.memberAccess(obj, a), b), c)
+// each of a, b, c → ARKTS_CreateGlobal
 
 obj.method(args)
 // memberAccess promotes the function to global, even if discarded after the call
 
-let s: String = (String)(obj.name)
-// Ref(JSString) global, then copy out — ark_interop could do
-// getProperty("name").toString() with only a scope-local JSValue
+let s: String = (String)obj.name
+// memberAccess promotes the string to global, then copy out — ark_interop could do
+// obj.getProperty("name").toString() with only a scope-local JSValue
 ```
 
 Immediates stay free of globals; every heap-typed temporary pays `CreateGlobal` /
@@ -86,8 +87,7 @@ Immediates stay free of globals; every heap-typed temporary pays `CreateGlobal` 
 
 # Problem 2: Hard to capture JS semantics on method call
 
-In ArkTS/JS, whether `this` is bound depends on **how** the method is invoked — not only
-on looking it up:
+In ArkTS/JS, whether `this` is bound depends on **how** the method is invoked:
 
 ```typescript
 class A {
@@ -104,7 +104,7 @@ let a = new A()
 a.m(10)     // reaches B  — call site is a.m(...), so this === a
 
 let x = a.m
-x(20)       // reaches A  — call site is x(...); this is not a
+x(20)       // reaches A  — call site is x(...); this is null
 ```
 
 Cangjie desugars both shapes the same way:
@@ -150,6 +150,6 @@ chain from the separate calls, so this optimization needs the compiler to emit t
 form. Today’s desugaring always produces the nested shape, which blocks that class of
 optimization.
 
-Even then, today’s FFI is one property at a time (`ARKTS_GetProperty`). A true batch needs
+NOTE: Even then, today’s FFI is one property at a time (`ARKTS_GetProperty`). A true batch needs
 a foreign function that accepts the whole path in one call; otherwise Cangjie would still
 invoke `ARKTS_GetProperty` once per field.

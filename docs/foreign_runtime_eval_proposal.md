@@ -63,8 +63,8 @@ x(20)
 
 - **Lifetime:** one `eval` can open a single scope for intermediates and promote only what
   escapes (e.g. the final `Extern`).
-- **Method `this`:** `FuncCall(MemberAccess(a, "m"), …)` keeps the receiver in the tree; a bare
-  `FuncCall(Value(x), …)` does not — matching JS call-site rules.
+- **Method `this`:** `FuncCall(MemberAccess(a, "m"), ...)` keeps the receiver in the tree; a bare
+  `FuncCall(Value(x), ...)` does not — matching JS call-site rules.
 - **Batching:** a `MemberAccess` chain can be lowered to one path-capable FFI call instead of N
   `ARKTS_GetProperty`s.
 
