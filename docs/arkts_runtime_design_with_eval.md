@@ -394,22 +394,29 @@ sequenceDiagram
 
 ## 6. Conversions
 
-Language rules from the `Extern` design remain unchanged: a Cangjie value used where
+A Cangjie value used where
 `Extern<T>` is expected becomes `T.toExtern`, while a forced cast `(U)e` becomes
 `T.fromExtern<U>(e)`. This section covers those hooks and the internal `toJSValue` helper.
 
 ### `toJSValue`: Cangjie value → `JSValue`
 
 This bind-thread helper converts assigned values, call arguments, indexes, and values passed
-to `toExtern`. If the input is an `Extern<T>`, it may be either a `Payload` or another
-expression tree, so `toJSValue` evaluates it within the current scope. Other values are
-converted according to their runtime type. The `Imm`/`Ref` decision is deferred to
-`retain`.
+to `toExtern`. An `Extern<T>` input must already be an evaluated `Payload`; another
+expression node is rejected. Other values are converted according to their runtime type.
+The `Imm`/`Ref` decision is deferred to `retain`.
 
 ```cangjie
 private static func toJSValue(value: Any): JSValue {
     if (value is Extern<T>) {
-        return evalTree((value as Extern<T>).getOrThrow())
+        let external = (value as Extern<T>).getOrThrow()
+        return match (external) {
+            case Payload(payload) =>
+                match ((payload as ArkTSHandle).getOrThrow()) {
+                    case Imm(value) => value
+                    case Ref(owner) => owner.toJSValue()
+                }
+            case _ => throw Exception("Expected an evaluated ArkTS value")
+        }
     }
     if (value is (Extern<T>) -> Extern<T>) {
         let callback = (value as ((Extern<T>) -> Extern<T>)).getOrThrow()
@@ -417,7 +424,7 @@ private static func toJSValue(value: Any): JSValue {
             let arguments = Array<JSValue>(info.count) { index => info[index] }
             let externalArguments = retain(context.array(arguments).toJSValue())
             let result = callback(externalArguments)
-            evalTree(result)
+            toJSValue(result)
         }).toJSValue()
     }
     if (value is Bool)    { return context.boolean((value as Bool).getOrThrow()).toJSValue() }
@@ -426,7 +433,6 @@ private static func toJSValue(value: Any): JSValue {
     if (value is Float64) { return context.number((value as Float64).getOrThrow()).toJSValue() }
     if (value is String)  { return context.string((value as String).getOrThrow()).toJSValue() }
     if (value is BigInt)  { return context.bigint((value as BigInt).getOrThrow()).toJSValue() }
-    if (value is Array<Nothing>)       { return arrayJSValue(Array<Nothing>()) }
     if (value is Array<Int64>)         { return arrayJSValue((value as Array<Int64>).getOrThrow()) }
     if (value is Array<Float64>)       { return arrayJSValue((value as Array<Float64>).getOrThrow()) }
     if (value is Array<Bool>)          { return arrayJSValue((value as Array<Bool>).getOrThrow()) }
@@ -438,15 +444,14 @@ private static func toJSValue(value: Any): JSValue {
 
 Notes:
 
-- An `Extern<T>` from the same concrete runtime is evaluated without retaining an
-  intermediate result. An `Extern` belonging to another ArkTS specialization does not
-  match this branch.
+- An `Extern<T>` from the same concrete runtime is projected from its payload without a
+  copy. An unevaluated node is rejected, and an `Extern` belonging to another ArkTS
+  specialization does not match this branch.
 - A Cangjie callback of type `(Extern<T>) -> Extern<T>` becomes a JS function. On
   invocation, all JS arguments are collected into one array and passed to the callback as
-  an evaluated `Extern<T>`. The callback result may itself be a tree and is evaluated
-  before being returned to JS. The JS `this` argument is currently ignored.
+  an evaluated `Extern<T>`. The callback must also return an evaluated payload.
 - `Int64` is widened to `Float64` because JS numbers are doubles.
-- Supported arrays are empty `Array<Nothing>` and arrays of `Int64`, `Float64`, `Bool`,
+- Supported arrays are arrays of `Int64`, `Float64`, `Bool`,
   `String`, or same-runtime `Extern<T>`. `arrayJSValue<E>` maps each element through
   `toJSValue`; other array types are rejected.
 
