@@ -281,7 +281,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
             context.undefined().toJSValue()
         case IndexedUpdate(target, index, value) =>
             let v1 = evalTree(target)
-            writeIndex(v1, index, toJSValue(value))
+            writeIndex(v1, index, value)
             context.undefined().toJSValue()
         case FuncCall(callee, arguments) =>
             call(callee, arguments)
@@ -291,9 +291,11 @@ private static func evalTree(tree: Extern<T>): JSValue {
 
 ### Indexed access
 
-Index operations accept an integer position, a `String` property name, or an `Extern<T>`
-from the same runtime. The `Extern<T>` case is evaluated within the current tree rather
-than retained as a separate intermediate result.
+Index operations accept an integer position, a `String` property name, or an evaluated
+`Extern<T>` from the same runtime. The `Extern<T>` must be a `Payload`; another expression
+node is rejected. Existing `JSKeyable` handles, such as strings and symbols, are reused;
+other ArkTS values are converted to strings. `writeIndex` resolves this key before
+converting the assigned value, preserving target–index–value evaluation order.
 
 ```cangjie
 private static func readIndex(target: JSValue, index: Any): JSValue {
@@ -302,19 +304,35 @@ private static func readIndex(target: JSValue, index: Any): JSValue {
         case position: Int32 => target.getElement(Int64(position))
         case propertyName: String => target.getProperty(propertyName)
         case externalIndex: Extern<T> =>
-            // Access using evalTree(externalIndex).
+            target.getProperty(toJSKeyable(externalIndex))
         case _ => throw Exception("Unsupported ArkTS index type")
     }
 }
 
-private static func writeIndex(target: JSValue, index: Any, value: JSValue): Unit {
+private static func writeIndex(target: JSValue, index: Any, value: Any): Unit {
     match (index) {
-        case position: Int64 => target.setElement(position, value)
-        case position: Int32 => target.setElement(Int64(position), value)
-        case propertyName: String => target.setProperty(propertyName, value)
+        case position: Int64 => target.setElement(position, toJSValue(value))
+        case position: Int32 => target.setElement(Int64(position), toJSValue(value))
+        case propertyName: String => target.setProperty(propertyName, toJSValue(value))
         case externalIndex: Extern<T> =>
-            // Update using evalTree(externalIndex).
+            let key = toJSKeyable(externalIndex)
+            target.setProperty(key, toJSValue(value))
         case _ => throw Exception("Unsupported ArkTS index type")
+    }
+}
+
+private static func toJSKeyable(index: Extern<T>): JSKeyable {
+    match (index) {
+        case Payload(payload) =>
+            match ((payload as ArkTSHandle).getOrThrow()) {
+                case Imm(value) => value.toString()
+                case Ref(owner) =>
+                    match (owner) {
+                        case key: JSKeyable => key
+                        case _ => owner.toJSValue().toString()
+                    }
+            }
+        case _ => throw Exception("Expected an evaluated ArkTS index")
     }
 }
 ```
