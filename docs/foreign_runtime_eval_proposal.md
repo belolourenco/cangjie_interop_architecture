@@ -1,7 +1,7 @@
 # Proposal: `ForeignRuntime.eval` + `ExternExpTree`
 
 Collapse the dynamic `ForeignRuntime` operations into one entry point that receives the
-whole expression as a tree.
+whole expression as a tree. Cangjie code in [here](../examples/runtime_with_eval_and_ExternExpTree.cj).
 
 ## Interface
 
@@ -71,7 +71,7 @@ x(20)
 ## Alternative: `Extern` is the tree
 
 Drop `ExternExpTree`. Make `Extern` itself the recursive enum; the leaf is `Payload(Any)`
-instead of `Value(Extern<T>)`.
+instead of `Value(Extern<T>)`. Cangjie code in [here](../examples/runtime_with_eval_and_ExternAsATree.cj).
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
@@ -130,6 +130,8 @@ handles.
 
 The proposal that introduces a `ExternExpTree` is compatible as an extension to the current operations `memberAccess`, `indexedAccess`, `toExtern`, etc. We can define the function `eval` resorting to the other static functions. The foreign runtime implementer can opt to simply implement `memberAccess`, `indexedAccess`, `memberUpdate`, `indexedUpdate`, `functionCall`, `fromExtern`, `toExtern` and leave the `eval` function as defined below.
 
+Cangjie code in [here](../examples/runtime_with_eval_and_ExternExpTree_extended.cj).
+
 ```cangjie
 public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
     static func memberAccess(e: Extern<T>, field: String): Extern<T>
@@ -167,6 +169,8 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 ```
 
 The same idea is also possible when the `Extern` is itself the tree, however that already breaks compatibility due to the changes to `Extern` itself.
+
+Cangjie code in [here](../examples/runtime_with_eval_and_ExternAsATree_extended.cj).
 
 ```cangjie
 public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
