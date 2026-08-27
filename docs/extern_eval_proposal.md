@@ -324,3 +324,39 @@ public class ArkTS <: ForeignRuntime<ArkTS> {
     }
 }
 ```
+
+## Extension: direct typed evaluation
+
+An immediately converted expression currently crosses the runtime twice:
+
+```cangjie
+let name = T.fromExtern<String>(
+    T.eval(MemberAccess(Value(blob), "name")))
+```
+
+Add a typed entry point so the runtime can evaluate and convert in one operation:
+
+```cangjie
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+    ...
+
+    static func evalAs<R>(t: ExternExpTree<T>): R {
+        fromExtern<R>(eval(t)) // compatibility fallback
+    }
+}
+```
+
+An optimized runtime overrides the fallback:
+
+```cangjie
+public static func evalAs<R>(tree: ExternExpTree<ArkTS>): R {
+    run { fromJSValue<R>(evalTree(tree)) }
+}
+
+// (String)blob.name
+// → ArkTS.evalAs<String>(MemberAccess(Value(blob), "name"))
+```
+
+This uses one dispatch and one scope, and avoids retaining a foreign result that is
+immediately converted to a Cangjie value. The same extension applies when `Extern<T>` is
+the tree by changing the parameter type of `evalAs` to `Extern<T>`.
