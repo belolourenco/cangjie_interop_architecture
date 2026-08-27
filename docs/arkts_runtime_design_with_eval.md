@@ -577,9 +577,155 @@ public static func requireSystemNativeModule(
 
 ## 8. Lifetime
 
-One `eval` call uses one engine scope. Values produced while reducing the tree remain local
-to that scope; only the final result is passed to `retain`. Consequently, a chain such as
-`a.b.c.d` does not create a global handle for each member access.
+Heap-valued `JSValue`s are local handles and must be created inside an engine scope. The
+scope must remain open until an escaping result has passed through `retain`; closing it
+then releases all intermediate handles while the retained `JSHeapObject` global remains
+valid.
+
+### Scope ownership
+
+Opening a scope only in `eval` is not a complete design: `toExtern`, `fromExtern`, module
+loading, and several helpers also create or project local heap values. The scope policy
+must therefore cover every operation that enters `ark_interop`. There are two coherent
+ownership models.
+
+#### Runtime-managed scopes
+
+The runtime can make `run` both the thread-dispatch and handle-scope boundary. The scope
+is opened only after execution reaches the JS thread, and it encloses `operation()` in
+both paths:
+
+```cangjie
+private static func run<R>(operation: () -> R): R {
+    if (context.isInBindThread()) {
+        return context.newScope {
+            operation()
+        }
+    }
+
+    let result = Box(None<ArkTSResult<R>>)
+    let mutex = Mutex()
+    let done: Condition
+    synchronized(mutex) {
+        done = mutex.condition()
+    }
+
+    context.postJSTask {
+        let completed: ArkTSResult<R> =
+            try {
+                ArkTSResult.Ok(
+                    context.newScope {
+                        operation()
+                    }
+                )
+            } catch (e: Exception) {
+                ArkTSResult.Err(e)
+            }
+        synchronized(mutex) {
+            result.value = Some(completed)
+            done.notify()
+        }
+    }
+
+    synchronized(mutex) {
+        done.waitUntil({ => result.value.isSome() })
+        match (result.value.getOrThrow()) {
+            case Ok(value) => value
+            case Err(error) => throw error
+        }
+    }
+}
+```
+
+Every public operation already goes through `run`, so this covers evaluation, conversion,
+and helpers without relying on callers. `retain` executes inside `operation()` and creates
+a global before the scope closes. Thus `run` may return a retained `Extern`, a global, an
+immediate, or a Cangjie value, but it must never return an unretained heap `JSValue`.
+
+This model opens one scope for every call to `run`, including calls that happen to use
+only immediate values. The open/close functions are `@FastNative`, however, and an
+evaluation tree still incurs one pair for the whole tree rather than one pair per node.
+The boundary is a `run` call rather than a source expression: for example,
+`(Float64)blob.area()` performs one scoped `run` for `eval` and another for `fromExtern`.
+The posted path also nests this scope inside the one created by `ark_interop`'s task
+executor; the inner scope is intentional because it gives `run` its own cleanup boundary.
+
+#### Caller-managed scopes
+
+Alternatively, `run` can remain a dispatch-only primitive and the library can expose a
+scope helper:
+
+```cangjie
+public static func withScope<R>(operation: () -> R): R {
+    run {
+        context.newScope(operation)
+    }
+}
+```
+
+The user can then group several operations under one dispatch and one scope:
+
+```cangjie
+let blob = ArkTS.withScope {
+    let api = ArkTS.requireArkModule("test.ets")
+    let result = api.createRectangle()
+    result.width = 3.0
+    let area: Float64 = (Float64)result.area()
+    result
+}
+```
+
+Calls made inside the block see that they are already on the bind thread, so their nested
+calls to the dispatch-only `run` execute inline. Temporary local handles from all four
+operations are released when `withScope` returns. The returned `blob` remains valid
+because any heap value escaping in an `Extern` has been promoted to a global. A raw heap
+`JSValue`, by contrast, must not escape the callback.
+
+This approach amortizes both dispatch and scope creation across the block, but it makes
+correctness depend on user discipline. An operation made outside `withScope` may have no
+scope at all, and the compiler cannot force application code to use the helper. A scope
+must also not span an asynchronous suspension or be closed on a different thread. For
+those reasons, caller-managed scopes are better treated as an optimization than as the
+only lifetime mechanism.
+
+#### Automatic safety with optional batching
+
+The two models can be combined. `run` automatically establishes a scope, while a public
+`withScope` lets advanced callers batch operations. A depth counter on the bind thread
+prevents nested operations from opening redundant scopes:
+
+```cangjie
+private static var scopeDepth: Int64 = 0
+
+private static func scoped<R>(operation: () -> R): R {
+    if (scopeDepth > 0) {
+        return operation()
+    }
+    return context.newScope {
+        scopeDepth++
+        let result = try {
+            operation()
+        } finally {
+            scopeDepth--
+        }
+        result
+    }
+}
+
+// Use scoped(operation) instead of operation() in both JS-thread paths of run.
+public static func withScope<R>(operation: () -> R): R {
+    run(operation)
+}
+```
+
+Because `scoped` is entered only after dispatch, `scopeDepth` is read and written only on
+the bind thread. Standalone operations remain safe, while operations inside `withScope`
+share its outer scope and dispatch. This hybrid is the strongest default if profiling
+shows that per-operation scope creation is significant.
+
+When evaluation runs inside either a runtime- or caller-owned scope, values produced while
+reducing a tree remain local and only its final result is retained. Consequently, a chain
+such as `a.b.c.d` does not create a global handle for each member access.
 
 An evaluated `Payload(Imm(...))` needs no disposal. `Payload(Ref(...))` owns an engine
 global and releases it when the payload is finalized. Unevaluated operation nodes own no
@@ -587,6 +733,6 @@ additional engine resources, although they may refer to payloads elsewhere in th
 
 | Kind | Storage | Dispose |
 | --- | --- | --- |
-| Intermediate `JSValue` | evaluation scope | end of `eval` |
+| Intermediate `JSValue` | current engine scope | when that scope closes |
 | `Imm` | engine immediate | none |
 | `Ref` | `JSHeapObject` global | finalizer → `ARKTS_DisposeGlobal` |
