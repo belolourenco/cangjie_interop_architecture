@@ -836,3 +836,72 @@ additional engine resources, although they may refer to payloads elsewhere in th
 | Intermediate `JSValue` | current engine scope | when that scope closes |
 | `Imm` | engine immediate | none |
 | `Ref` | `JSHeapObject` global | finalizer → `ARKTS_DisposeGlobal` |
+
+## Optimizations
+
+`evalTree` sees the whole member chain:
+
+```cangjie
+a.b.c.d
+// →
+MemberAccess(
+    MemberAccess(
+        MemberAccess(a, "b"),
+        "c"),
+    "d")
+```
+
+It can flatten adjacent `MemberAccess` nodes and evaluate them as one path. Walking from
+the outer node produces `d, c, b`, so the helper reverses the fields before returning:
+
+```cangjie
+private static func flattenMemberPath(
+    tree: Extern<T>
+): (Extern<T>, Array<String>) {
+    let fields = ArrayList<String>()
+    var root = tree
+
+    while (true) {
+        match (root) {
+            case MemberAccess(target, field) =>
+                fields.add(field)
+                root = target
+            case _ =>
+                fields.reverse()
+                return (root, fields.toArray())
+        }
+    }
+}
+
+private static func evalTree(tree: Extern<T>): JSValue {
+    match (tree) {
+        case Payload(h) => match ((h as ArkTSHandle).getOrThrow()) {
+            case Imm(value) => value
+            case Ref(owner) => owner.toJSValue()
+        }
+        case MemberAccess(_, _) =>
+            let (root, fields) = flattenMemberPath(tree)
+            getPropertyPath(evalTree(root), fields)
+        case ...
+    }
+}
+
+// a.b.c.d → getPropertyPath(a, ["b", "c", "d"])
+```
+
+This replaces:
+
+```text
+a.getProperty("b").getProperty("c").getProperty("d")
+```
+
+with:
+
+```text
+getPropertyPath(a, ["b", "c", "d"])
+```
+
+This needs a future path-based FFI such as `ARKTS_GetPropertyPath`; the current
+`ARKTS_GetProperty` still requires one call per field. The path operation must preserve
+normal property-read order, getters, proxy traps, and exceptions. Calls, updates, and
+indexed accesses stop the batch.
