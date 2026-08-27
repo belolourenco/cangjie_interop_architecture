@@ -839,6 +839,9 @@ additional engine resources, although they may refer to payloads elsewhere in th
 
 ## Optimizations
 
+
+### Batched member access
+
 `evalTree` sees the whole member chain:
 
 ```cangjie
@@ -905,3 +908,50 @@ This needs a future path-based FFI such as `ARKTS_GetPropertyPath`; the current
 `ARKTS_GetProperty` still requires one call per field. The path operation must preserve
 normal property-read order, getters, proxy traps, and exceptions. Calls, updates, and
 indexed accesses stop the batch.
+
+### Batched member updates
+
+The same path can include a final write:
+
+```cangjie
+a.b.c = value
+
+// Current
+a.getProperty("b").setProperty("c", toJSValue(value))
+
+// Future
+setPropertyPath(a, ["b", "c"], value)
+```
+
+`evalTree` can reuse `flattenMemberPath` by adding the updated field to the chain:
+
+```cangjie
+case MemberUpdate(target, field, value) =>
+    let update = MemberAccess(target, field)
+    let (root, fields) = flattenMemberPath(update)
+    setPropertyPath(evalTree(root), fields, value)
+```
+
+A future `ARKTS_SetPropertyPath` must read every field except the last, convert `value`,
+and then update the last field, preserving the existing evaluation and exception order.
+
+### Direct typed evaluation
+
+A cast currently dispatches twice and retains a result between `eval` and `fromExtern`:
+
+```cangjie
+ArkTS.fromExtern<Float64>(ArkTS.eval(tree))
+```
+
+A compiler/runtime extension can reduce and convert in one scope:
+
+```cangjie
+public static func evalAs<R>(tree: Extern<T>): R {
+    run { fromJSValue<R>(evalTree(tree)) }
+}
+
+// → ArkTS.evalAs<Float64>(tree)
+```
+
+This removes the second `run` and avoids creating a global handle for a heap result that
+is immediately converted to a Cangjie value.
