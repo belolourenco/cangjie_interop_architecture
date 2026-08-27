@@ -182,6 +182,29 @@ Two cases:
   `Mutex`/`Condition`, then return its value or rethrow its exception. `ArkTSResult<R>` is
   the internal `Ok(R) | Err(Exception)` carrier used to move the outcome across threads.
 
+### UI-thread-bound alternative: `spawn (UIThread)`
+
+When `context` is guaranteed to have been bound on the platform UI thread, the
+`Future` returned by `spawn (UIThread)` can carry the result or exception and park the
+caller without an explicit `Mutex`/`Condition`:
+
+```cangjie
+import ohos.base.UIThread
+
+private static func run<R>(operation: () -> R): R {
+    if (context.isInBindThread()) {
+        return operation()
+    }
+
+    return (spawn (UIThread) {
+        operation()
+    }).get()
+}
+```
+
+This is not a generic replacement for `postJSTask`: `UIThread` targets the platform UI
+thread, which may differ from the bind thread of a worker or engine-owned `JSContext`.
+
 ---
 
 ## 4. Handle model
@@ -637,6 +660,27 @@ private static func run<R>(operation: () -> R): R {
 }
 ```
 
+The `spawn (UIThread)` alternative from [Thread dispatch](#3-thread-dispatch) uses the
+same scope boundary; only the off-thread dispatch changes:
+
+```cangjie
+import ohos.base.UIThread
+
+private static func run<R>(operation: () -> R): R {
+    if (context.isInBindThread()) {
+        return context.newScope {
+            operation()
+        }
+    }
+
+    return (spawn (UIThread) {
+        context.newScope {
+            operation()
+        }
+    }).get()
+}
+```
+
 Every public operation already goes through `run`, so this covers evaluation, conversion,
 and helpers without relying on callers. `retain` executes inside `operation()` and creates
 a global before the scope closes. Thus `run` may return a retained `Extern`, a global, an
@@ -647,8 +691,6 @@ only immediate values. The open/close functions are `@FastNative`, however, and 
 evaluation tree still incurs one pair for the whole tree rather than one pair per node.
 The boundary is a `run` call rather than a source expression: for example,
 `(Float64)blob.area()` performs one scoped `run` for `eval` and another for `fromExtern`.
-The posted path also nests this scope inside the one created by `ark_interop`'s task
-executor; the inner scope is intentional because it gives `run` its own cleanup boundary.
 
 #### Caller-managed scopes
 
@@ -777,11 +819,9 @@ This gives standalone calls automatic safety, lets a batch share one dispatch an
 ArkTS-managed scope, and supports real nested cleanup boundaries. A scope callback must
 remain synchronous on the JS thread, and a raw local heap `JSValue` must not escape it.
 
-The counter deliberately tracks only scopes opened through this ArkTS runtime. It cannot
-observe a scope created directly by `ark_interop`; when such a scope is active and
-`scopeLevel == 0`, `runInScope` opens a redundant nested scope. That affects overhead, not
-correctness. It also avoids depending on a capability that the public `ark_interop` API
-does not provide.
+The counter deliberately tracks only scopes opened through this ArkTS runtime. It does
+not attempt to infer whether external code has opened a scope because the public
+`ark_interop` API does not expose that state.
 
 Values produced while reducing a tree remain local and only its final result is retained.
 Consequently, a chain such as `a.b.c.d` does not create a global handle for each member
