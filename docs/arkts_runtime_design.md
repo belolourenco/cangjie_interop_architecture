@@ -135,6 +135,29 @@ Two cases:
 - **(a) On the bind thread** — call `operation()` directly.
 - **(b) Off the bind thread** — post `operation` with `postJSTask`, wait on a `Mutex`/`Condition`, and once the JS thread finishes, either return its value or rethrow the exception it captured. `ArkTSResult<R>` is the internal `Ok(R) | Err(Exception)` carrier used to move that outcome across threads.
 
+### UI-thread-bound alternative: `spawn (UIThread)`
+
+When `context` is guaranteed to have been bound on the platform UI thread, the
+`Future` returned by `spawn (UIThread)` can carry the result or exception and park the
+caller without an explicit `Mutex`/`Condition`:
+
+```cangjie
+import ohos.base.UIThread
+
+private static func run<R>(operation: () -> R): R {
+    if (context.isInBindThread()) {
+        return operation()
+    }
+
+    return (spawn (UIThread) {
+        operation()
+    }).get()
+}
+```
+
+This is not a generic replacement for `postJSTask`: `UIThread` targets the platform UI
+thread, which may differ from the bind thread of a worker or engine-owned `JSContext`.
+
 ---
 
 ## 4. Handle model
