@@ -5,6 +5,8 @@ import ohos_app_cangjie_entry.arkts_runtime_v1.*
 // The original examples below are reproduced as shown in:
 // https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cj-dts2cj-translation-rules.md
 
+// LLM generated ArkTS module compatible with this file is in ExternDeclarationFixtures.ets
+
 // The examples below assume the following definition of ArkTS foreign runtime
 class ArkTSNotImplemented <: Exception {}
 
