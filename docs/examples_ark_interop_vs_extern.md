@@ -1,8 +1,8 @@
 # `ohos.ark_interop` versus `Extern<ArkTS>`
 
-`ohos.ark_interop` is the existing Cangjie library for talking to the ArkTS/JS engine: applications hold a `JSContext`, wrap values as `JSValue` (and typed helpers), and call the VM through explicit APIs. The extern solution in (ArkTS Foreign Runtime)[`https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/foreign_arkts_runtime_design.md`](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/foreign_arkts_runtime_design.md) keeps that engine contract but hides it behind `Extern<ArkTS>`: the compiler desugars member access, calls, and casts onto `ArkTS <: ForeignRuntime<ArkTS>`.
+`ohos.ark_interop` is the existing Cangjie library for talking to the ArkTS/JS engine: applications hold a `JSContext`, wrap values as `JSValue` (and typed helpers), and call the VM through explicit APIs. The extern solution in [ArkTS Foreign Runtime](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/arkts_runtime_design.md) keeps that engine contract but hides it behind `Extern<ArkTS>`: the compiler desugars dynamic member access, calls, and casts onto `ArkTS <: ForeignRuntime<ArkTS>` static methods.
 
-Examples below are taken from the [cj-dts2cj translation rules](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_zh_cn/cmd-tools/cj-dts2cj-translation-rules.md) and translated by hand. Even though the ArkTS runtime is not yet fully implemented, the Extern versions still compile successfully.
+Examples below are taken from the [cj-dts2cj translation rules](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_en/cmd-tools/cj-dts2cj-translation-rules.md) and translated by hand. Even though the ArkTS runtime is not yet fully implemented, the Extern versions still compile successfully using the definition of `ArkTS<T>` and `ArkTS1` below.
 
 # The ArkTS runtime
 
@@ -85,7 +85,7 @@ protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (
 
 ```cangjie
 protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (JSContext) -> Array<JSValue>): T where T <: JSInteropType<T> {
-    hmsGlobalApiCall<T>(moduleName, funcName, args) {ctx, info => T.fromJSValue(ctx, info)}
+    hmsGlobalApiCall<T>(moduleName, funcName, args) {ctx, res => T.fromJSValue(ctx, res)}
 }
 ```
 
@@ -99,18 +99,25 @@ protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (
 
 ```cangjie
 public func greeter(fn: (a: String) -> Unit): Unit {
-    hmsGlobalApiCall < Unit >( "_ark_interop_api", "greeter", { ctx =>[ctx.function({ ctx, info =>
-            let p0 = String.fromJSValue(ctx, info[0])
+    hmsGlobalApiCall < Unit >( "_ark_interop_api", "greeter", { ctx =>[ctx.function({ ctx, callInfo =>
+            let p0 = String.fromJSValue(ctx, callInfo[0])
             fn(p0)
             ctx.undefined().toJSValue()
         }).toJSValue()] })
 }
 ```
 
+Notes about the above:
+
+1. The ArkTS declaration is `declare function greeter(fn: (a: string) => void): void`. The generated Cangjie wrapper must pass `fn` as a JS function.
+2. `hmsGlobalApiCall`'s third argument is not `fn`. It is an args builder of type `args: (JSContext) -> Array<JSValue>`.
+3. `ctx.function({ ctx, callInfo => ... })` is what translates `fn` into ArkTS. It builds a `JSLambda` (note that `type JSLambda = (JSContext, JSCallInfo) -> JSValue`) and then a `JSFunction`.
+4. that `JSFunction` is then passed to the ArkTS function `greeter` as the only argument.
+
 > ```cangjie
 > public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ info: Extern<Runtime> =>
->             let p0: String = (String)info[0]
+>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>             let p0: String = (String)callInfo[0]
 >             fn(p0)
 >             Runtime.undefined()
 >         }])
@@ -122,8 +129,8 @@ OR, inlining functions
 > ```cangjie
 > public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
 >     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->     let efn: Extern<Runtime> = { arg: Extern<Runtime> =>
->         let p0 = (String)arg[0]
+>     let efn: Extern<Runtime> = { callInfo: Extern<Runtime> =>
+>         let p0 = (String)callInfo[0]
 >         fn(p0)
 >         Runtime.undefined()
 >     }
@@ -163,7 +170,7 @@ OR, inlining functions
   */
 public func testMultiGenericT < T, M >(t: T, m: M): T where T <: JSInteropType<T>, M <: JSInteropType<M> {
     hmsGlobalApiCall < T >( "my_module_genericFunction", "testMultiGenericT", { ctx =>[t.toJSValue(ctx), m.toJSValue(ctx)] }) {
-        ctx, info => T.fromJSValue(ctx, info)
+        ctx, res => T.fromJSValue(ctx, res)
     }
 }
 ```
@@ -171,7 +178,7 @@ public func testMultiGenericT < T, M >(t: T, m: M): T where T <: JSInteropType<T
 > ```cangjie
 > public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
 >     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
->         info: Extern<Runtime> => (T)info
+>         res: Extern<Runtime> => (T)res
 >     }
 > }
 > ```
@@ -1258,7 +1265,7 @@ public class Box<T> {
     */
     public func getValue(): T {
         jsObjApiCall < T >( arkts_object, "getValue", emptyArg) {
-            ctx, info => T.fromJSValue(ctx, info)
+            ctx, res => T.fromJSValue(ctx, res)
         }
     }
 
@@ -1327,9 +1334,9 @@ public class TestListener {
             }).toJSValue()
         }
         if(let Some(v) <- onError) {
-            obj["onError"] = context.function({ ctx, info =>
-                let p0 = ErrorCode.fromJSValue(ctx, info[0])
-                let p1 = String.fromJSValue(ctx, info[1])
+            obj["onError"] = context.function({ ctx, callInfo =>
+                let p0 = ErrorCode.fromJSValue(ctx, callInfo[0])
+                let p1 = String.fromJSValue(ctx, callInfo[1])
                 v(p0, p1)
                 ctx.undefined().toJSValue()
             }).toJSValue()
@@ -1341,8 +1348,8 @@ public class TestListener {
             }).toJSValue()
         }
         if(let Some(v) <- onEvent) {
-            obj["onEvent"] = context.function({ ctx, info =>
-                let p0 = EventType.parse(Int32.fromJSValue(ctx, info[0]))
+            obj["onEvent"] = context.function({ ctx, callInfo =>
+                let p0 = EventType.parse(Int32.fromJSValue(ctx, callInfo[0]))
                 v(p0)
                 ctx.undefined().toJSValue()
             }).toJSValue()
@@ -1433,9 +1440,9 @@ public class TestListener {
 >             }
 >         }
 >         if(let Some(v) <- onError) {
->             obj.onError = { info: Extern<Runtime> =>
->                 let p0 = (ErrorCode)info[0]
->                 let p1 = (String)info[1]
+>             obj.onError = { callInfo: Extern<Runtime> =>
+>                 let p0 = (ErrorCode)callInfo[0]
+>                 let p1 = (String)callInfo[1]
 >                 v(p0, p1)
 >                 Runtime.undefined()
 >             }
@@ -1447,8 +1454,8 @@ public class TestListener {
 >             }
 >         }
 >         if(let Some(v) <- onEvent) {
->             obj.onEvent = { info: Extern<Runtime> =>
->                 let p0 = EventType.parse((Int32)info[0])
+>             obj.onEvent = { callInfo: Extern<Runtime> =>
+>                 let p0 = EventType.parse((Int32)callInfo[0])
 >                 v(p0)
 >                 Runtime.undefined()
 >             }
