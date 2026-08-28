@@ -205,7 +205,7 @@ OR, inlining functions
 >     let res = jsModule.greeter(efn)
 >     (Unit)res
 > }
-```
+> ```
 
 >> ```cangjie
 >> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
@@ -508,6 +508,14 @@ public class GreetingSettings {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 850 |  |
+| sugared version | 718 | -132 |
+| desugared: current extern | 975 | +125 |
+| desugared: extern with eval | 1023 | +173 |
+
+
 ## Optional Properties
 
 ```cangjie
@@ -616,6 +624,14 @@ public class Product {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 469 |  |
+| sugared version | 418 | -51 |
+| desugared: current extern | 512 | +43 |
+| desugared: extern with eval | 530 | +61 |
+
+
 ## Readonly Properties
 
 ```cangjie
@@ -702,6 +718,14 @@ public class Point {
 >>>     }
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 443 |  |
+| sugared version | 342 | -101 |
+| desugared: current extern | 480 | +37 |
+| desugared: extern with eval | 504 | +61 |
+
 
 ## Member Functions
 
@@ -826,6 +850,14 @@ public class Person {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 610 |  |
+| sugared version | 415 | -195 |
+| desugared: current extern | 553 | -57 |
+| desugared: extern with eval | 559 | -51 |
+
+
 ## Function Overloading
 
 ```cangjie
@@ -943,6 +975,14 @@ public class Calculator {
 >>>     }
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 550 |  |
+| sugared version | 435 | -115 |
+| desugared: current extern | 573 | +23 |
+| desugared: extern with eval | 561 | +11 |
+
 
 ## Array Types
 
@@ -1085,6 +1125,14 @@ public class List {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 653 |  |
+| sugared version | 426 | -227 |
+| desugared: current extern | 544 | -109 |
+| desugared: extern with eval | 550 | -103 |
+
+
 ## Inheritance
 
 ```cangjie
@@ -1171,6 +1219,14 @@ public open class A {
 >>>     
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 341 |  |
+| sugared version | 284 | -57 |
+| desugared: current extern | 353 | +12 |
+| desugared: extern with eval | 365 | +24 |
+
 
 ```cangjie
 /*interface B {
@@ -1285,6 +1341,14 @@ public open class B <: A {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 444 |  |
+| sugared version | 352 | -92 |
+| desugared: current extern | 490 | +46 |
+| desugared: extern with eval | 514 | +70 |
+
+
 ```cangjie
 /*interface C {
     f(): void
@@ -1393,6 +1457,14 @@ public open class C {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 323 |  |
+| sugared version | 298 | -25 |
+| desugared: current extern | 347 | +24 |
+| desugared: extern with eval | 341 | +18 |
+
+
 ```cangjie
 /*interface D {
     }*/
@@ -1472,6 +1544,14 @@ public open class D <: C {
 >>>     }
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 260 |  |
+| sugared version | 279 | +19 |
+| desugared: current extern | 279 | +19 |
+| desugared: extern with eval | 279 | +19 |
+
 
 ```cangjie
 /*interface E {
@@ -1569,6 +1649,14 @@ public open class E <: A {
 >>>     
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 345 |  |
+| sugared version | 297 | -48 |
+| desugared: current extern | 366 | +21 |
+| desugared: extern with eval | 378 | +33 |
+
 
 ```cangjie
 /*interface F {
@@ -1678,6 +1766,14 @@ public open class F <: C {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 338 |  |
+| sugared version | 322 | -16 |
+| desugared: current extern | 371 | +33 |
+| desugared: extern with eval | 365 | +27 |
+
+
 ## Nested Objects
 
 ```cangjie
@@ -1776,6 +1872,14 @@ public open class AutoGenType0 {
 >>>     
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 490 |  |
+| sugared version | 411 | -79 |
+| desugared: current extern | 549 | +59 |
+| desugared: extern with eval | 573 | +83 |
+
 
 ```cangjie
 public open class UserProfile {
@@ -1886,6 +1990,14 @@ public open class UserProfile {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 619 |  |
+| sugared version | 505 | -114 |
+| desugared: current extern | 692 | +73 |
+| desugared: extern with eval | 728 | +109 |
+
+
 ## Union Type Aliases
 
 ```cangjie
@@ -1955,6 +2067,14 @@ public enum GreetingLike {
 >>>     }
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 230 |  |
+| sugared version | 258 | +28 |
+| desugared: current extern | 294 | +64 |
+| desugared: extern with eval | 294 | +64 |
+
 
 ## Constructors
 
@@ -2124,6 +2244,14 @@ public class Greeter {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 847 |  |
+| sugared version | 519 | -328 |
+| desugared: current extern | 686 | -161 |
+| desugared: extern with eval | 686 | -161 |
+
+
 ## Static Members
 
 ```cangjie
@@ -2255,6 +2383,14 @@ public class MathUtils {
 >>> }
 >>> ```
 
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 752 |  |
+| sugared version | 453 | -299 |
+| desugared: current extern | 666 | -86 |
+| desugared: extern with eval | 648 | -104 |
+
+
 ## Protected Members
 ```cangjie
 public class AnimalProtect {
@@ -2373,6 +2509,14 @@ public class AnimalProtect {
 >>>     // ...
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 642 |  |
+| sugared version | 294 | -348 |
+| desugared: current extern | 412 | -230 |
+| desugared: extern with eval | 418 | -224 |
+
 
 ## Generic Members
 
@@ -2495,6 +2639,14 @@ public class Box<T> {
 >>>     // ...
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 631 |  |
+| sugared version | 268 | -363 |
+| desugared: current extern | 406 | -225 |
+| desugared: extern with eval | 412 | -219 |
+
 
 ## Function Types
 ## Interface Properties
@@ -2689,7 +2841,7 @@ public class TestListener {
 >     }
 >
 > }
-```
+> ```
 
 >> ```cangjie
 >> public class TestListener<Runtime> where Runtime <: ArkTS<Runtime>  {
@@ -2864,6 +3016,14 @@ public class TestListener {
 >>>
 >>> }
 >>> ```
+
+| | Number of Characters (no comments) | Diff |
+| --- | --- | --- |
+| ohos.ark_interop | 2281 |  |
+| sugared version | 1671 | -610 |
+| desugared: current extern | 2290 | +9 |
+| desugared: extern with eval | 2338 | +57 |
+
 
 ```cangjie
 // NOTE: defined in cangjie_sdk/cangjie_tools/hyperlangExtension/tests/expected/my_module/function_types.cj
