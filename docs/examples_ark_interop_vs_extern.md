@@ -60,10 +60,30 @@ protected func jsGlobalApiCall<T>(moduleName: String, modulePrefix: ?String, fun
 >     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
 >     let jsModule = Runtime.getModule(moduleName, modulePrefix)
 >     let function = Runtime.memberAccess(jsModule, funcName)
->     let jsRet = function(args) // this will run on the main thread
+>     let jsRet = Runtime.functionCall(function, args) // this will run on the main thread
 >     onResolve(jsRet)
 > }
 > ```
+
+>> ```cangjie
+>> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
+>>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
+>>     let function = Runtime.memberAccess(jsModule, funcName)
+>>     let jsRet = Runtime.functionCall(function, args) // this will run on the main thread
+>>     onResolve(jsRet)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
+>>>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
+>>>     let function = Runtime.eval(MemberAccess(jsModule, funcName))
+>>>     let jsRet = Runtime.eval(FuncCall(function, args)) // this will run on the main thread
+>>>     onResolve(jsRet)
+>>> }
+>>> ```
 
 ### hmsGlobalApiCall
 
@@ -81,6 +101,20 @@ protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (
 > }
 > ```
 
+>> ```cangjie
+>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
+>>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
+>>>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
+>>> }
+>>> ```
+
 ### hmsGlobalApiCall
 
 ```cangjie
@@ -94,6 +128,18 @@ protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (
 >     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => (T)res }
 > }
 > ```
+
+>> ```cangjie
+>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
+>>> }
+>>> ```
 
 ## Global Functions
 
@@ -124,6 +170,26 @@ Notes about the above:
 > }
 > ```
 
+>> ```cangjie
+>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>>             let p0: String = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
+>>             fn(p0)
+>>             Runtime.undefined()
+>>         }])
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>>>             let p0: String = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>             fn(p0)
+>>>             Runtime.undefined()
+>>>         }])
+>>> }
+>>> ```
+
 Note: as opposed to the `ark_interop` library we can immediately translate the arguments because we already have access to the `Runtime`.
 
 OR, inlining functions
@@ -141,6 +207,32 @@ OR, inlining functions
 > }
 ```
 
+>> ```cangjie
+>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
+>>         let p0 = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
+>>         fn(p0)
+>>         Runtime.undefined()
+>>     })
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "greeter"), [efn])
+>>     Runtime.fromExtern<Unit>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
+>>>         let p0 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>         fn(p0)
+>>>         Runtime.undefined()
+>>>     })
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "greeter"), [efn]))
+>>>     Runtime.fromExtern<Unit>(res)
+>>> }
+>>> ```
+
 ```cangjie
 /**
 * @brief printToConsole(s: string): void
@@ -156,6 +248,18 @@ public func printToConsole(s: String): Unit {
 > }
 > ```
 
+>> ```cangjie
+>> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+>>> }
+>>> ```
+
 OR, inlining functions
 
 > ```cangjie
@@ -165,6 +269,22 @@ OR, inlining functions
 >     (Unit)res
 > }
 > ```
+
+>> ```cangjie
+>> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "printToConsole"), [s]) // implicit conversion String -> Extern<Runtime>
+>>     Runtime.fromExtern<Unit>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "printToConsole"), [s])) // implicit conversion String -> Extern<Runtime>
+>>>     Runtime.fromExtern<Unit>(res)
+>>> }
+>>> ```
 
 ```cangjie
 /**
@@ -185,6 +305,22 @@ public func testMultiGenericT < T, M >(t: T, m: M): T where T <: JSInteropType<T
 > }
 > ```
 
+>> ```cangjie
+>> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+>>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+>>>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
+>>>     }
+>>> }
+>>> ```
+
 OR, inlining functions
 
 > ```cangjie
@@ -194,6 +330,22 @@ OR, inlining functions
 >     (T)res
 > }
 > ```
+
+>> ```cangjie
+>> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "testMultiGenericT"), [t, m]) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
+>>     Runtime.fromExtern<T>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "testMultiGenericT"), [t, m])) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
+>>>     Runtime.fromExtern<T>(res)
+>>> }
+>>> ```
 
 
 ## Basic Types
@@ -276,6 +428,86 @@ public class GreetingSettings {
 > }
 > ```
 
+>> ```cangjie
+>> public class GreetingSettings<Runtime> where Runtime <: ArkTS<Runtime> {
+>>
+>>     protected GreetingSettings(
+>>         public var greeting: String,
+>>         public var duration!: Option<Float64> = None,
+>>         public var color!: Option<String> = None
+>>     ) {}
+>>
+>>     public func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "greeting", greeting)
+>>         if(let Some(v) <- duration) {
+>>             Runtime.memberUpdate(obj, "duration", v)
+>>         }
+>>         if(let Some(v) <- color) {
+>>             Runtime.memberUpdate(obj, "color", v)
+>>         }
+>>         obj
+>>     }
+>>
+>>     public static func fromExtern(input: Extern<Runtime>): GreetingSettings<Runtime> {
+>>         GreetingSettings(
+>>             Runtime.fromExtern<String>(Runtime.memberAccess(input, "greeting")),
+>>             duration: if(Runtime.isUndefined(Runtime.memberAccess(input, "duration"))) {
+>>                 None
+>>             } else {
+>>                 Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "duration"))
+>>             },
+>>             color: if(Runtime.isUndefined(Runtime.memberAccess(input, "color"))) {
+>>                 None
+>>             } else {
+>>                 Runtime.fromExtern<String>(Runtime.memberAccess(input, "color"))
+>>             }
+>>         )
+>>     }
+>>
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class GreetingSettings<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>
+>>>     protected GreetingSettings(
+>>>         public var greeting: String,
+>>>         public var duration!: Option<Float64> = None,
+>>>         public var color!: Option<String> = None
+>>>     ) {}
+>>>
+>>>     public func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "greeting", greeting))
+>>>         if(let Some(v) <- duration) {
+>>>             Runtime.eval(MemberUpdate(obj, "duration", v))
+>>>         }
+>>>         if(let Some(v) <- color) {
+>>>             Runtime.eval(MemberUpdate(obj, "color", v))
+>>>         }
+>>>         obj
+>>>     }
+>>>
+>>>     public static func fromExtern(input: Extern<Runtime>): GreetingSettings<Runtime> {
+>>>         GreetingSettings(
+>>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "greeting"))),
+>>>             duration: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "duration")))) {
+>>>                 None
+>>>             } else {
+>>>                 Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "duration")))
+>>>             },
+>>>             color: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "color")))) {
+>>>                 None
+>>>             } else {
+>>>                 Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "color")))
+>>>             }
+>>>         )
+>>>     }
+>>>
+>>> }
+>>> ```
+
 ## Optional Properties
 
 ```cangjie
@@ -332,6 +564,58 @@ public class Product {
 > }
 > ```
 
+>> ```cangjie
+>> public class Product<Runtime> where Runtime <: ArkTS<Runtime> {
+>>
+>>     protected Product(public var price!: Option<Float64> = None) {}
+>>
+>>     public func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         if(let Some(v) <- price) {
+>>             Runtime.memberUpdate(obj, "price", v)
+>>         }
+>>         obj
+>>     }
+>>
+>>     public static func fromExtern(input: Extern<Runtime>): Product<Runtime> {
+>>         Product(
+>>         price: if (Runtime.isUndefined(Runtime.memberAccess(input, "price"))) {
+>>             None
+>>         } else {
+>>             Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "price"))
+>>         }
+>>         )
+>>     }
+>>
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Product<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>
+>>>     protected Product(public var price!: Option<Float64> = None) {}
+>>>
+>>>     public func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         if(let Some(v) <- price) {
+>>>             Runtime.eval(MemberUpdate(obj, "price", v))
+>>>         }
+>>>         obj
+>>>     }
+>>>
+>>>     public static func fromExtern(input: Extern<Runtime>): Product<Runtime> {
+>>>         Product(
+>>>         price: if (Runtime.isUndefined(Runtime.eval(MemberAccess(input, "price")))) {
+>>>             None
+>>>         } else {
+>>>             Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "price")))
+>>>         }
+>>>         )
+>>>     }
+>>>
+>>> }
+>>> ```
+
 ## Readonly Properties
 
 ```cangjie
@@ -376,6 +660,48 @@ public class Point {
 >     }
 > }
 > ```
+
+>> ```cangjie
+>> public class Point<Runtime> where Runtime <: ArkTS<Runtime> {
+>>     protected Point(public let x: Float64,
+>>     public let y: Float64) {}
+>>
+>>     public func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "x", x)
+>>         Runtime.memberUpdate(obj, "y", y)
+>>         obj
+>>     }
+>>
+>>     public static func fromJSValue(input: Extern<Runtime>): Point<Runtime> {
+>>         Point(
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "x")),
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "y"))
+>>         )
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Point<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>     protected Point(public let x: Float64,
+>>>     public let y: Float64) {}
+>>>
+>>>     public func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "x", x))
+>>>         Runtime.eval(MemberUpdate(obj, "y", y))
+>>>         obj
+>>>     }
+>>>
+>>>     public static func fromJSValue(input: Extern<Runtime>): Point<Runtime> {
+>>>         Point(
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "x"))),
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "y")))
+>>>         )
+>>>     }
+>>> }
+>>> ```
 
 ## Member Functions
 
@@ -444,6 +770,62 @@ public class Person {
 > }
 > ```
 
+>> ```cangjie
+>> public class Person<Runtime> where Runtime <: ArkTS<Runtime> {
+>>     protected Person(let arkts_object: Extern<Runtime>) {}
+>>
+>>     public mut prop name: String {
+>>         get() {
+>>             Runtime.fromExtern<String>(Runtime.memberAccess(arkts_object, "name"))
+>>         }
+>>         set(v) {
+>>             Runtime.memberUpdate(arkts_object, "name", v)
+>>         }
+>>
+>>     }
+>>
+>>     public func greet(): String {
+>>         Runtime.fromExtern<String>(Runtime.functionCall(Runtime.memberAccess(arkts_object, "greet"), []))
+>>     }
+>>
+>>     func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>
+>>     static func fromExtern (input: Extern<Runtime>): Person<Runtime> {
+>>         Person(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Person<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>     protected Person(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>     public mut prop name: String {
+>>>         get() {
+>>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "name")))
+>>>         }
+>>>         set(v) {
+>>>             Runtime.eval(MemberUpdate(arkts_object, "name", v))
+>>>         }
+>>>
+>>>     }
+>>>
+>>>     public func greet(): String {
+>>>         Runtime.fromExtern<String>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "greet"), [])))
+>>>     }
+>>>
+>>>     func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>
+>>>     static func fromExtern (input: Extern<Runtime>): Person<Runtime> {
+>>>         Person(input)
+>>>     }
+>>> }
+>>> ```
+
 ## Function Overloading
 
 ```cangjie
@@ -503,6 +885,64 @@ public class Calculator {
 >     }
 > }
 > ```
+
+>> ```cangjie
+>> public class Calculator<Runtime> where Runtime <: ArkTS<Runtime> {
+>>
+>>     protected Calculator(let arkts_object: Extern<Runtime>) {}
+>>
+>>
+>>     /**
+>>     * @brief add(x: number,y: number): number
+>>     */
+>>     public func add(x: Float64, y: Float64): Float64 {
+>>         Runtime.fromExtern<Float64>(Runtime.functionCall(Runtime.memberAccess(arkts_object, "add"), [x, y]))
+>>     }
+>>     /**
+>>     * @brief add(x: string,y: string): String
+>>     */
+>>     public func add(x: String, y: String): String {
+>>         Runtime.fromExtern<String>(Runtime.functionCall(Runtime.memberAccess(arkts_object, "add"), [x, y]))
+>>     }
+>>
+>>     func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>
+>>     static func fromJSValue (input: Extern<Runtime>): Calculator<Runtime> {
+>>         Calculator(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Calculator<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>
+>>>     protected Calculator(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>
+>>>     /**
+>>>     * @brief add(x: number,y: number): number
+>>>     */
+>>>     public func add(x: Float64, y: Float64): Float64 {
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "add"), [x, y])))
+>>>     }
+>>>     /**
+>>>     * @brief add(x: string,y: string): String
+>>>     */
+>>>     public func add(x: String, y: String): String {
+>>>         Runtime.fromExtern<String>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "add"), [x, y])))
+>>>     }
+>>>
+>>>     func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>
+>>>     static func fromJSValue (input: Extern<Runtime>): Calculator<Runtime> {
+>>>         Calculator(input)
+>>>     }
+>>> }
+>>> ```
 
 ## Array Types
 
@@ -577,6 +1017,74 @@ public class List {
 > }
 > ```
 
+>> ```cangjie
+>> public class List<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>
+>>     protected List(let arkts_object: Extern<Runtime>) {}
+>>
+>>
+>>     public mut prop items: Array<String> {
+>>         get() {
+>>             Runtime.fromExtern<Array<String>>(Runtime.memberAccess(arkts_object, "items"))
+>>         }
+>>         set(v) {
+>>             Runtime.memberUpdate(arkts_object, "items", v)
+>>         }
+>>         // NOTE: this assume that toExtern converts Array<String> into Extern,
+>>         // and fromExtern converts Extern into ArrayString
+>>     }
+>>
+>>     /**
+>>     * @brief add(item: string): void
+>>     */
+>>     public func add(item: String): Unit {
+>>         Runtime.functionCall(Runtime.memberAccess(arkts_object, "add"), [item])
+>>     }
+>>
+>>     func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>
+>>     static func fromExtern (input: Extern<Runtime>): List<Runtime> {
+>>         List(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class List<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>
+>>>     protected List(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>
+>>>     public mut prop items: Array<String> {
+>>>         get() {
+>>>             Runtime.fromExtern<Array<String>>(Runtime.eval(MemberAccess(arkts_object, "items")))
+>>>         }
+>>>         set(v) {
+>>>             Runtime.eval(MemberUpdate(arkts_object, "items", v))
+>>>         }
+>>>         // NOTE: this assume that toExtern converts Array<String> into Extern,
+>>>         // and fromExtern converts Extern into ArrayString
+>>>     }
+>>>
+>>>     /**
+>>>     * @brief add(item: string): void
+>>>     */
+>>>     public func add(item: String): Unit {
+>>>         Runtime.eval(FuncCall(MemberAccess(arkts_object, "add"), [item]))
+>>>     }
+>>>
+>>>     func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>
+>>>     static func fromExtern (input: Extern<Runtime>): List<Runtime> {
+>>>         List(input)
+>>>     }
+>>> }
+>>> ```
+
 ## Inheritance
 
 ```cangjie
@@ -621,6 +1129,48 @@ public open class A {
 >     
 > }
 > ```
+
+>> ```cangjie
+>> public open class A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected A(public var p: Float64) {}
+>>     
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "p", p)
+>>         obj
+>>     }
+>>     
+>>     public static func fromExtern(input: Extern<Runtime>): A<Runtime> {
+>>         A(
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "p"))
+>>         )
+>>     }
+>>     
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public open class A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected A(public var p: Float64) {}
+>>>     
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "p", p))
+>>>         obj
+>>>     }
+>>>     
+>>>     public static func fromExtern(input: Extern<Runtime>): A<Runtime> {
+>>>         A(
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p")))
+>>>         )
+>>>     }
+>>>     
+>>> }
+>>> ```
 
 ```cangjie
 /*interface B {
@@ -679,6 +1229,62 @@ public open class B <: A {
 > }
 > ```
 
+>> ```cangjie
+>> /*interface B {
+>>     p1: number;
+>>     }*/
+>>
+>> public open class B<Runtime> <: A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected B(p: Float64,
+>>     public var p1: Float64) { super(p) }
+>>     
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "p", p)
+>>         Runtime.memberUpdate(obj, "p1", p1)
+>>         obj
+>>     }
+>>     
+>>     public static func fromExtern(input: Extern<Runtime>): B<Runtime> {
+>>         B(
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "p")),
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "p1"))
+>>         )
+>>     }
+>>     
+>> }
+>> ```
+
+>>> ```cangjie
+>>> /*interface B {
+>>>     p1: number;
+>>>     }*/
+>>>
+>>> public open class B<Runtime> <: A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected B(p: Float64,
+>>>     public var p1: Float64) { super(p) }
+>>>     
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "p", p))
+>>>         Runtime.eval(MemberUpdate(obj, "p1", p1))
+>>>         obj
+>>>     }
+>>>     
+>>>     public static func fromExtern(input: Extern<Runtime>): B<Runtime> {
+>>>         B(
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p"))),
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p1")))
+>>>         )
+>>>     }
+>>>     
+>>> }
+>>> ```
+
 ```cangjie
 /*interface C {
     f(): void
@@ -733,6 +1339,60 @@ public open class C {
 > }
 > ```
 
+>> ```cangjie
+>> /*interface C {
+>>     f(): void
+>>     }*/
+>>
+>> public open class C<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected C(public var arkts_object: Extern<Runtime>) {}
+>>     
+>>     
+>>     /**
+>>      * @brief f(): void
+>>      */
+>>     public func f(): Unit {
+>>         Runtime.functionCall(Runtime.memberAccess(arkts_object, "f"), [])
+>>     }
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>     
+>>     static func fromExtern(input: Extern<Runtime>): C<Runtime> {
+>>         C(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> /*interface C {
+>>>     f(): void
+>>>     }*/
+>>>
+>>> public open class C<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected C(public var arkts_object: Extern<Runtime>) {}
+>>>     
+>>>     
+>>>     /**
+>>>      * @brief f(): void
+>>>      */
+>>>     public func f(): Unit {
+>>>         Runtime.eval(FuncCall(MemberAccess(arkts_object, "f"), []))
+>>>     }
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>     
+>>>     static func fromExtern(input: Extern<Runtime>): C<Runtime> {
+>>>         C(input)
+>>>     }
+>>> }
+>>> ```
+
 ```cangjie
 /*interface D {
     }*/
@@ -772,6 +1432,46 @@ public open class D <: C {
 >     }
 > }
 > ```
+
+>> ```cangjie
+>> /*interface D {
+>>     }*/
+>>
+>> public open class D<Runtime> <: C<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected D(arkts_object: Extern<Runtime>) { super(arkts_object) }
+>>     
+>>     
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>     
+>>     static func fromExtern(input: Extern<Runtime>): D<Runtime> {
+>>         D(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> /*interface D {
+>>>     }*/
+>>>
+>>> public open class D<Runtime> <: C<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected D(arkts_object: Extern<Runtime>) { super(arkts_object) }
+>>>     
+>>>     
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>     
+>>>     static func fromExtern(input: Extern<Runtime>): D<Runtime> {
+>>>         D(input)
+>>>     }
+>>> }
+>>> ```
 
 ```cangjie
 /*interface E {
@@ -821,6 +1521,54 @@ public open class E <: A {
 >     
 > }
 > ```
+
+>> ```cangjie
+>> /*interface E {
+>>     }*/
+>>
+>> public open class E<Runtime> <: A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected E(p: Float64) { super(p) }
+>>     
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "p", p)
+>>         obj
+>>     }
+>>     
+>>     public static func fromExtern(input: Extern<Runtime>): E<Runtime> {
+>>         E(
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "p"))
+>>         )
+>>     }
+>>     
+>> }
+>> ```
+
+>>> ```cangjie
+>>> /*interface E {
+>>>     }*/
+>>>
+>>> public open class E<Runtime> <: A<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected E(p: Float64) { super(p) }
+>>>     
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "p", p))
+>>>         obj
+>>>     }
+>>>     
+>>>     public static func fromExtern(input: Extern<Runtime>): E<Runtime> {
+>>>         E(
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p")))
+>>>         )
+>>>     }
+>>>     
+>>> }
+>>> ```
 
 ```cangjie
 /*interface F {
@@ -876,6 +1624,60 @@ public open class F <: C {
 > }
 > ```
 
+>> ```cangjie
+>> /*interface F {
+>>     g(): void
+>>     }*/
+>>
+>> public open class F<Runtime> <: C<Runtime> where Runtime <: ArkTS<Runtime> {
+>>     
+>>     protected F(arkts_object: Extern<Runtime>) { super(arkts_object) }
+>>     
+>>     
+>>     /**
+>>      * @brief g(): void
+>>      */
+>>     public func g(): Unit {
+>>         Runtime.functionCall(Runtime.memberAccess(arkts_object, "g"), [])
+>>     }
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>     
+>>     static func fromExtern(input: Extern<Runtime>): F<Runtime> {
+>>         F(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> /*interface F {
+>>>     g(): void
+>>>     }*/
+>>>
+>>> public open class F<Runtime> <: C<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>     
+>>>     protected F(arkts_object: Extern<Runtime>) { super(arkts_object) }
+>>>     
+>>>     
+>>>     /**
+>>>      * @brief g(): void
+>>>      */
+>>>     public func g(): Unit {
+>>>         Runtime.eval(FuncCall(MemberAccess(arkts_object, "g"), []))
+>>>     }
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>     
+>>>     static func fromExtern(input: Extern<Runtime>): F<Runtime> {
+>>>         F(input)
+>>>     }
+>>> }
+>>> ```
+
 ## Nested Objects
 
 ```cangjie
@@ -926,6 +1728,54 @@ public open class AutoGenType0 {
 >     
 > }
 > ```
+
+>> ```cangjie
+>> public open class AutoGenType0<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected AutoGenType0(public var city: String,
+>>     public var zipCode: String) {}
+>>     
+>>
+>>     public open func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "city", city)
+>>         Runtime.memberUpdate(obj, "zipCode", zipCode)
+>>         obj
+>>     }
+>>     
+>>     public static func fromExtern(input: Extern<Runtime>): AutoGenType0<Runtime> {
+>>         AutoGenType0(
+>>         Runtime.fromExtern<String>(Runtime.memberAccess(input, "city")),
+>>         Runtime.fromExtern<String>(Runtime.memberAccess(input, "zipCode"))
+>>         )
+>>     }
+>>     
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public open class AutoGenType0<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected AutoGenType0(public var city: String,
+>>>     public var zipCode: String) {}
+>>>     
+>>>
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "city", city))
+>>>         Runtime.eval(MemberUpdate(obj, "zipCode", zipCode))
+>>>         obj
+>>>     }
+>>>     
+>>>     public static func fromExtern(input: Extern<Runtime>): AutoGenType0<Runtime> {
+>>>         AutoGenType0(
+>>>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "city"))),
+>>>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "zipCode")))
+>>>         )
+>>>     }
+>>>     
+>>> }
+>>> ```
 
 ```cangjie
 public open class UserProfile {
@@ -982,6 +1832,60 @@ public open class UserProfile {
 > }
 > ```
 
+>> ```cangjie
+>> public open class UserProfile<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     
+>>     protected UserProfile(public var id: Float64,
+>>     public var name: String,
+>>     public var address: AutoGenType0<Runtime>) {}
+>>     
+>>     
+>>     public open func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         Runtime.memberUpdate(obj, "id", id)
+>>         Runtime.memberUpdate(obj, "name", name)
+>>         Runtime.memberUpdate(obj, "address", address.toExtern())
+>>         obj
+>>     }
+>>     
+>>     public static func fromExtern(input: Extern<Runtime>): UserProfile<Runtime> {
+>>         UserProfile(
+>>         Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "id")),
+>>         Runtime.fromExtern<String>(Runtime.memberAccess(input, "name")),
+>>         AutoGenType0.fromExtern(Runtime.memberAccess(input, "address"))
+>>         )
+>>     }
+>>     
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public open class UserProfile<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     
+>>>     protected UserProfile(public var id: Float64,
+>>>     public var name: String,
+>>>     public var address: AutoGenType0<Runtime>) {}
+>>>     
+>>>     
+>>>     public open func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         Runtime.eval(MemberUpdate(obj, "id", id))
+>>>         Runtime.eval(MemberUpdate(obj, "name", name))
+>>>         Runtime.eval(MemberUpdate(obj, "address", address.toExtern()))
+>>>         obj
+>>>     }
+>>>     
+>>>     public static func fromExtern(input: Extern<Runtime>): UserProfile<Runtime> {
+>>>         UserProfile(
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "id"))),
+>>>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "name"))),
+>>>         AutoGenType0.fromExtern(Runtime.eval(MemberAccess(input, "address")))
+>>>         )
+>>>     }
+>>>     
+>>> }
+>>> ```
+
 ## Union Type Aliases
 
 ```cangjie
@@ -1015,6 +1919,42 @@ public enum GreetingLike {
 >     }
 > }
 > ```
+
+>> ```cangjie
+>> public enum GreetingLike<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>     | STRING(String)
+>>     | NUMBER(Float64)
+>>
+>>     public func toExtern(): Extern<Runtime> {
+>>         match(this) {
+>>             case STRING(x) =>
+>>                 let e: Extern<Runtime> = Runtime.toExtern(x)
+>>                 e
+>>             case NUMBER(x) => 
+>>                 let e: Extern<Runtime> = Runtime.toExtern(x)
+>>                 e
+>>         }
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public enum GreetingLike<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>     | STRING(String)
+>>>     | NUMBER(Float64)
+>>>
+>>>     public func toExtern(): Extern<Runtime> {
+>>>         match(this) {
+>>>             case STRING(x) =>
+>>>                 let e: Extern<Runtime> = Runtime.toExtern(x)
+>>>                 e
+>>>             case NUMBER(x) => 
+>>>                 let e: Extern<Runtime> = Runtime.toExtern(x)
+>>>                 e
+>>>         }
+>>>     }
+>>> }
+>>> ```
 
 ## Constructors
 
@@ -1104,6 +2044,86 @@ public class Greeter {
 > }
 > ```
 
+>> ```cangjie
+>> public class Greeter<Runtime> where Runtime <: ArkTS<Runtime> {
+>>
+>>     protected Greeter(let arkts_object: Extern<Runtime>) {}
+>>     /**
+>>     * @brief constructor(greeting: string): void
+>>     */
+>>     public init(greeting: String) {
+>>         arkts_object = Runtime.functionCall(Runtime.memberAccess(Runtime.global(), "Greeter"), [greeting])
+>>         // or
+>>         // arkts_object = Runtime.functionCall(Runtime.memberAccess(Runtime.memberAccess(Runtime.global(), "Greeter"), "new"), [greeting])
+>>     }
+>>
+>>     public mut prop greeting: String {
+>>         get() {
+>>             Runtime.fromExtern<String>(Runtime.memberAccess(arkts_object, "greeting"))
+>>         }
+>>         set(v) {
+>>             Runtime.memberUpdate(arkts_object, "greeting", v)
+>>         }
+>>
+>>     }
+>>
+>>     /**
+>>     * @brief showGreeting(): void
+>>     */
+>>     public func showGreeting(): Unit {
+>>         Runtime.functionCall(Runtime.memberAccess(arkts_object, "showGreeting"), [])
+>>     }
+>>
+>>     func toExtern(): Extern<Runtime> {
+>>         arkts_object
+>>     }
+>>
+>>     static func fromExtern (input: Extern<Runtime>): Greeter<Runtime> {
+>>         Greeter(input)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Greeter<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>
+>>>     protected Greeter(let arkts_object: Extern<Runtime>) {}
+>>>     /**
+>>>     * @brief constructor(greeting: string): void
+>>>     */
+>>>     public init(greeting: String) {
+>>>         arkts_object = Runtime.eval(FuncCall(MemberAccess(Runtime.global(), "Greeter"), [greeting]))
+>>>         // or
+>>>         // arkts_object = Runtime.eval(FuncCall(MemberAccess(MemberAccess(Runtime.global(), "Greeter"), "new"), [greeting]))
+>>>     }
+>>>
+>>>     public mut prop greeting: String {
+>>>         get() {
+>>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "greeting")))
+>>>         }
+>>>         set(v) {
+>>>             Runtime.eval(MemberUpdate(arkts_object, "greeting", v))
+>>>         }
+>>>
+>>>     }
+>>>
+>>>     /**
+>>>     * @brief showGreeting(): void
+>>>     */
+>>>     public func showGreeting(): Unit {
+>>>         Runtime.eval(FuncCall(MemberAccess(arkts_object, "showGreeting"), []))
+>>>     }
+>>>
+>>>     func toExtern(): Extern<Runtime> {
+>>>         arkts_object
+>>>     }
+>>>
+>>>     static func fromExtern (input: Extern<Runtime>): Greeter<Runtime> {
+>>>         Greeter(input)
+>>>     }
+>>> }
+>>> ```
+
 ## Static Members
 
 ```cangjie
@@ -1175,6 +2195,66 @@ public class MathUtils {
 > }
 > ```
 
+>> ```cangjie
+>> public class MathUtils<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>
+>>     protected MathUtils(let arkts_object: Extern<Runtime>) {}
+>>
+>>     // Static property
+>>     public mut prop PI: Float64 {
+>>         get() {
+>>             let module = Runtime.getModule("test", None)
+>>             Runtime.fromExtern<Float64>(Runtime.memberAccess(Runtime.memberAccess(module, "MathUtils"), "PI"))
+>>         }
+>>         set(v) {
+>>             let module = Runtime.getModule("test", None)
+>>             Runtime.memberUpdate(Runtime.memberAccess(module, "MathUtils"), "PI", v)
+>>         }
+>>
+>>     }
+>>
+>>     /**
+>>     * @brief square(x: number): number
+>>     */
+>>     public static func square(x: Float64): Float64 {
+>>         let module = Runtime.getModule("test", None)
+>>         Runtime.fromExtern<Float64>(Runtime.functionCall(Runtime.memberAccess(Runtime.memberAccess(module, "MathUtils"), "square"), [x]))
+>>     }
+>>
+>>     // ...
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class MathUtils<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>
+>>>     protected MathUtils(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>     // Static property
+>>>     public mut prop PI: Float64 {
+>>>         get() {
+>>>             let module = Runtime.getModule("test", None)
+>>>             Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(MemberAccess(module, "MathUtils"), "PI")))
+>>>         }
+>>>         set(v) {
+>>>             let module = Runtime.getModule("test", None)
+>>>             Runtime.eval(MemberUpdate(MemberAccess(module, "MathUtils"), "PI", v))
+>>>         }
+>>>
+>>>     }
+>>>
+>>>     /**
+>>>     * @brief square(x: number): number
+>>>     */
+>>>     public static func square(x: Float64): Float64 {
+>>>         let module = Runtime.getModule("test", None)
+>>>         Runtime.fromExtern<Float64>(Runtime.eval(FuncCall(MemberAccess(MemberAccess(module, "MathUtils"), "square"), [x])))
+>>>     }
+>>>
+>>>     // ...
+>>> }
+>>> ```
+
 ## Protected Members
 ```cangjie
 public class AnimalProtect {
@@ -1239,6 +2319,60 @@ public class AnimalProtect {
 >     // ...
 > }
 > ```
+
+>> ```cangjie
+>> public class AnimalProtect<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>
+>>     protected AnimalProtect(let arkts_object: Extern<Runtime>) {}
+>>
+>>     // Protected property
+>>     public mut prop name: String {
+>>         get() {
+>>             Runtime.fromExtern<String>(Runtime.memberAccess(arkts_object, "name"))
+>>         }
+>>         set(v) {
+>>             Runtime.memberUpdate(arkts_object, "name", v)
+>>         }
+>>
+>>     }
+>>
+>>     /**
+>>     * @brief makeSound(): void
+>>     */
+>>     public func makeSound(): Unit {
+>>         Runtime.functionCall(Runtime.memberAccess(arkts_object, "makeSound"), [])
+>>     }
+>>
+>>     // ...
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class AnimalProtect<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>
+>>>     protected AnimalProtect(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>     // Protected property
+>>>     public mut prop name: String {
+>>>         get() {
+>>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "name")))
+>>>         }
+>>>         set(v) {
+>>>             Runtime.eval(MemberUpdate(arkts_object, "name", v))
+>>>         }
+>>>
+>>>     }
+>>>
+>>>     /**
+>>>     * @brief makeSound(): void
+>>>     */
+>>>     public func makeSound(): Unit {
+>>>         Runtime.eval(FuncCall(MemberAccess(arkts_object, "makeSound"), []))
+>>>     }
+>>>
+>>>     // ...
+>>> }
+>>> ```
 
 ## Generic Members
 
@@ -1307,6 +2441,60 @@ public class Box<T> {
 >     // ...
 > }
 > ```
+
+>> ```cangjie
+>> public class Box<Runtime, T> where Runtime <: ArkTS<Runtime>  {
+>>
+>>     protected Box(let arkts_object: Extern<Runtime>) {}
+>>
+>>     // Property
+>>     public mut prop value: T {
+>>         get() {
+>>             Runtime.fromExtern<T>(Runtime.memberAccess(arkts_object, "value"))
+>>         }
+>>         set(v) {
+>>             Runtime.memberUpdate(arkts_object, "value", v)
+>>         }
+>>
+>>     }
+>>
+>>     /**
+>>     * @brief getValue(): T
+>>     */
+>>     public func getValue(): T {
+>>         Runtime.fromExtern<T>(Runtime.functionCall(Runtime.memberAccess(arkts_object, "getValue"), []))
+>>     }
+>>
+>>     // ...
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class Box<Runtime, T> where Runtime <: ArkTS<Runtime>  {
+>>>
+>>>     protected Box(let arkts_object: Extern<Runtime>) {}
+>>>
+>>>     // Property
+>>>     public mut prop value: T {
+>>>         get() {
+>>>             Runtime.fromExtern<T>(Runtime.eval(MemberAccess(arkts_object, "value")))
+>>>         }
+>>>         set(v) {
+>>>             Runtime.eval(MemberUpdate(arkts_object, "value", v))
+>>>         }
+>>>
+>>>     }
+>>>
+>>>     /**
+>>>     * @brief getValue(): T
+>>>     */
+>>>     public func getValue(): T {
+>>>         Runtime.fromExtern<T>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "getValue"), [])))
+>>>     }
+>>>
+>>>     // ...
+>>> }
+>>> ```
 
 ## Function Types
 ## Interface Properties
@@ -1502,6 +2690,180 @@ public class TestListener {
 >
 > }
 ```
+
+>> ```cangjie
+>> public class TestListener<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>
+>>     protected TestListener(public var onStart!: Option<() -> Unit> = None,
+>>         public var onDestroy!: Option<() -> Unit> = None,
+>>         public var onError!: Option<(code: ErrorCode, msg: String) -> Unit> = None,
+>>         public var onTouch!: Option<() -> Unit> = None,
+>>         public var onEvent!: Option<(e: EventType) -> Unit> = None
+>>     ) {}
+>>
+>>
+>>     public func toExtern(): Extern<Runtime> {
+>>         let obj = Runtime.object()
+>>         if(let Some(v) <- onStart) {
+>>             Runtime.memberUpdate(obj, "onStart", { _: Extern<Runtime> =>
+>>                 v()
+>>                 Runtime.undefined()
+>>             })
+>>         }
+>>         if(let Some(v) <- onDestroy) {
+>>             Runtime.memberUpdate(obj, "onDestroy", { _: Extern<Runtime> =>
+>>                 v()
+>>                 Runtime.undefined()
+>>             })
+>>         }
+>>         if(let Some(v) <- onError) {
+>>             Runtime.memberUpdate(obj, "onError", { callInfo: Extern<Runtime> =>
+>>                 let p0 = Runtime.fromExtern<ErrorCode>(Runtime.indexedAccess(callInfo, 0))
+>>                 let p1 = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 1))
+>>                 v(p0, p1)
+>>                 Runtime.undefined()
+>>             })
+>>         }
+>>         if(let Some(v) <- onTouch) {
+>>             Runtime.memberUpdate(obj, "onTouch", { _: Extern<Runtime> =>
+>>                 v()
+>>                 Runtime.undefined()
+>>             })
+>>         }
+>>         if(let Some(v) <- onEvent) {
+>>             Runtime.memberUpdate(obj, "onEvent", { callInfo: Extern<Runtime> =>
+>>                 let p0 = EventType.parse(Runtime.fromExtern<Int32>(Runtime.indexedAccess(callInfo, 0)))
+>>                 v(p0)
+>>                 Runtime.undefined()
+>>             })
+>>         }
+>>         obj
+>>     }
+>>
+>>     public static func fromExtern(input: Extern<Runtime>): TestListener<Runtime> {
+>>         TestListener(
+>>             onStart: if(Runtime.isUndefined(Runtime.memberAccess(input, "onStart"))) {
+>>                 None
+>>             } else {
+>>                 { => Runtime.functionCall(Runtime.memberAccess(input, "onStart"), [])
+>>                 }
+>>             },
+>>             onDestroy: if(Runtime.isUndefined(Runtime.memberAccess(input, "onDestroy"))) {
+>>                 None
+>>             } else {
+>>                 { => Runtime.functionCall(Runtime.memberAccess(input, "onDestroy"), [])
+>>                 }
+>>             },
+>>             onError: if(Runtime.isUndefined(Runtime.memberAccess(input, "onError"))) {
+>>                 None
+>>             } else {
+>>                 { code: ErrorCode, msg: String => Runtime.functionCall(Runtime.memberAccess(input, "onError"), [code, msg])
+>>                 }
+>>             },
+>>             onTouch: if(Runtime.isUndefined(Runtime.memberAccess(input, "onTouch"))) {
+>>                 None
+>>             } else {
+>>                 { => Runtime.functionCall(Runtime.memberAccess(input, "onTouch"), [])
+>>                 }
+>>             },
+>>             onEvent: if(Runtime.isUndefined(Runtime.memberAccess(input, "onEvent"))) {
+>>                 None
+>>             } else {
+>>                 { e: EventType => Runtime.functionCall(Runtime.memberAccess(input, "onEvent"), [e.get()])
+>>                 }
+>>             }
+>>         )
+>>     }
+>>
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public class TestListener<Runtime> where Runtime <: ArkTS<Runtime>  {
+>>>
+>>>     protected TestListener(public var onStart!: Option<() -> Unit> = None,
+>>>         public var onDestroy!: Option<() -> Unit> = None,
+>>>         public var onError!: Option<(code: ErrorCode, msg: String) -> Unit> = None,
+>>>         public var onTouch!: Option<() -> Unit> = None,
+>>>         public var onEvent!: Option<(e: EventType) -> Unit> = None
+>>>     ) {}
+>>>
+>>>
+>>>     public func toExtern(): Extern<Runtime> {
+>>>         let obj = Runtime.object()
+>>>         if(let Some(v) <- onStart) {
+>>>             Runtime.eval(MemberUpdate(obj, "onStart", { _: Extern<Runtime> =>
+>>>                 v()
+>>>                 Runtime.undefined()
+>>>             }))
+>>>         }
+>>>         if(let Some(v) <- onDestroy) {
+>>>             Runtime.eval(MemberUpdate(obj, "onDestroy", { _: Extern<Runtime> =>
+>>>                 v()
+>>>                 Runtime.undefined()
+>>>             }))
+>>>         }
+>>>         if(let Some(v) <- onError) {
+>>>             Runtime.eval(MemberUpdate(obj, "onError", { callInfo: Extern<Runtime> =>
+>>>                 let p0 = Runtime.fromExtern<ErrorCode>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>                 let p1 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 1)))
+>>>                 v(p0, p1)
+>>>                 Runtime.undefined()
+>>>             }))
+>>>         }
+>>>         if(let Some(v) <- onTouch) {
+>>>             Runtime.eval(MemberUpdate(obj, "onTouch", { _: Extern<Runtime> =>
+>>>                 v()
+>>>                 Runtime.undefined()
+>>>             }))
+>>>         }
+>>>         if(let Some(v) <- onEvent) {
+>>>             Runtime.eval(MemberUpdate(obj, "onEvent", { callInfo: Extern<Runtime> =>
+>>>                 let p0 = EventType.parse(Runtime.fromExtern<Int32>(Runtime.eval(IndexedAccess(callInfo, 0))))
+>>>                 v(p0)
+>>>                 Runtime.undefined()
+>>>             }))
+>>>         }
+>>>         obj
+>>>     }
+>>>
+>>>     public static func fromExtern(input: Extern<Runtime>): TestListener<Runtime> {
+>>>         TestListener(
+>>>             onStart: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "onStart")))) {
+>>>                 None
+>>>             } else {
+>>>                 { => Runtime.eval(FuncCall(MemberAccess(input, "onStart"), []))
+>>>                 }
+>>>             },
+>>>             onDestroy: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "onDestroy")))) {
+>>>                 None
+>>>             } else {
+>>>                 { => Runtime.eval(FuncCall(MemberAccess(input, "onDestroy"), []))
+>>>                 }
+>>>             },
+>>>             onError: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "onError")))) {
+>>>                 None
+>>>             } else {
+>>>                 { code: ErrorCode, msg: String => Runtime.eval(FuncCall(MemberAccess(input, "onError"), [code, msg]))
+>>>                 }
+>>>             },
+>>>             onTouch: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "onTouch")))) {
+>>>                 None
+>>>             } else {
+>>>                 { => Runtime.eval(FuncCall(MemberAccess(input, "onTouch"), []))
+>>>                 }
+>>>             },
+>>>             onEvent: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "onEvent")))) {
+>>>                 None
+>>>             } else {
+>>>                 { e: EventType => Runtime.eval(FuncCall(MemberAccess(input, "onEvent"), [e.get()]))
+>>>                 }
+>>>             }
+>>>         )
+>>>     }
+>>>
+>>> }
+>>> ```
 
 ```cangjie
 // NOTE: defined in cangjie_sdk/cangjie_tools/hyperlangExtension/tests/expected/my_module/function_types.cj
