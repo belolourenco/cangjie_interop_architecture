@@ -1,0 +1,10 @@
+[package]
+  cjc-version = "1.0.0"
+  name = "tree_flatten"
+  description = "Flatten a recursive Extern value and round-trip it through C"
+  version = "1.0.0"
+  output-type = "executable"
+  src-dir = "src"
+
+[ffi.c]
+  tree_flatten = { path = "./native" }

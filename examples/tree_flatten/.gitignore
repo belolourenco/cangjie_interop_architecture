@@ -1,0 +1,4 @@
+/native/tree_flatten.o
+/native/libtree_flatten.a
+/target/
+/build-script-cache/
