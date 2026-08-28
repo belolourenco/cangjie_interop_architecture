@@ -955,3 +955,31 @@ public static func evalAs<R>(tree: Extern<T>): R {
 
 This removes the second `run` and avoids creating a global handle for a heap result that
 is immediately converted to a Cangjie value.
+
+### Send the entire `Extern` tree at once
+
+Consider the following expression, where `e` has type `Extern<T>`:
+
+```cangjie
+e.a.b(42).c
+```
+
+The compiler desugars it to:
+
+```cangjie
+T.eval(MemberAccess(FunctionCall(MemberAccess(e, a), b, [42]), c))
+```
+
+Even in the best case, evaluating this tree requires three FFI calls:
+
+1. `MemberAccess(e, a)` via `ARKTS_GetProperty(...)`.
+2. `FunctionCall(..., b, [42])` via `ARKTS_Call(...)`.
+3. `MemberAccess(..., c)` via `ARKTS_GetProperty(...)`.
+
+To reduce this to a single FFI call, Cangjie can encode the entire expression tree as a
+`@C`-compatible value and send it to the C side for evaluation.
+
+Because the C side ultimately interprets the expression, Cangjie can serialize the
+`Extern` tree as a flat post-order sequence: each operand appears before the operation
+that consumes it. The C-side interpreter can then evaluate the sequence in order,
+without crossing the FFI boundary for every node.
