@@ -124,6 +124,8 @@ Notes about the above:
 > }
 > ```
 
+Note: as opposed to the `ark_interop` library we can immediately translate the arguments because we already have access to the `Runtime`.
+
 OR, inlining functions
 
 > ```cangjie
