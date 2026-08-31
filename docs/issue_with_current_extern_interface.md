@@ -137,7 +137,7 @@ a.b.c.d
 ```
 
 A typical `memberAccess` does an FFI round-trip. So `a.b.c.d` pays **three** crossings
-(and three intermediate handles), even though it is one logical path from `a`.
+(and three intermediate handles).
 
 A batched form would be cheaper:
 
@@ -145,10 +145,8 @@ A batched form would be cheaper:
 T.memberAccess(a, ["b", "c", "d"])   // one crossing / one lookup path
 ```
 
-But each nested call only sees one field name. The runtime cannot reconstruct the full
-chain from the separate calls, so this optimization needs the compiler to emit the batched
-form. Today’s desugaring always produces the nested shape, which blocks that class of
-optimization.
+This batched form requires the compiler to preserve the full field chain and pass it to
+`memberAccess`.
 
 NOTE: Even then, today’s FFI is one property at a time (`ARKTS_GetProperty`). A true batch needs
 a foreign function that accepts the whole path in one call; otherwise Cangjie would still
