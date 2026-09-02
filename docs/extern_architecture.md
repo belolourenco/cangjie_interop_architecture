@@ -343,15 +343,21 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
+    // primitive constructors
     | ExternPayload(Any)
     | ExternMemberAccess(Extern<T>,  /* field */ String)
     | ExternIndexedAccess(Extern<T>, /* index */ Any)
     | ExternMemberUpdate(Extern<T>,  /* field */ String, /* value */ Any)
     | ExternIndexedUpdate(Extern<T>, /* index */ Any,    /* value */ Any)
     | ExternFunctionCall(Extern<T>,  /* args  */ Array<Any>)
+    // derived constructors
     | ...
 }
 ```
+
+The `Extern<T>` constructors above are said to be the primitive `Extern` constructors.
+
+Even though we define `Extern<T>` as being non-exhaustive we require new constructors to be derived from the others - more on this in the next subsection.
 
 #### `ForeignRuntime<T>` interface
 
@@ -364,11 +370,13 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 
     static func eval(t: Extern<T>): Extern<T>
 
-    static func eval_unsupported(t: Extern<T>): Extern<T> {
+    static func evalDerived(t: Extern<T>): Extern<T> {
         throw ExternUnsupportedOperation()
     }
 }
 ```
+
+The goal of `evalDerived` is to define how the derived constructors are evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Optimization 2](#optimization-2).
 
 #### Exception hierarchy (all in `std.core`) <span id="exception-hierarchy-all-in-stdcore"></span>
 
@@ -392,19 +400,19 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 `ForeignRuntime` implementers **must** implement the following functions:
 
 1. `static func fromExtern<R>(e: Extern<T>): R`
-    - the argument `e: Extern<T>` is not guaranteed to be evaluated (e.g. `T.fromExtern<Int64>(ExternMemberAccess(e2, "foo"))`, for some `e2: Extern<T>`).
+    - the argument `e: Extern<T>` is not guaranteed to be evaluated, that is, it isn't necessarily of the form `ExternPayload(...)` (e.g. `T.fromExtern<Int64>(ExternMemberAccess(e2, "foo"))`, for some `e2: Extern<T>`).
     - must throw `ExternConversionException` if a conversion exception occurs.
 2. `static func toExtern<R>(v: R): Extern<T>`
     - must throw `ExternConversionException` if a conversion exception occurs.
 3. `static func eval(t: Extern<T>): Extern<T>`
     - must handle the Extern constructors `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`
-    - must call `eval_unsupported` in the default case.
+    - must call `evalDerived` in the default case.
     - if `t` is `ExternIndexedAccess(e, index)` and `index is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedAccess(e1, ExternMemberAccess(e2, "rank")))`)
-    - if `t` is `ExternMemberUpdate(e, field, value)` and `value is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
+    - if `t` is `ExternMemberUpdate(e, field, value)` and `value is Extern<T>`, then `value` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
     - if `t` is `ExternIndexedUpdate(e, index, value)` and `index is Extern<T>`, then `index` and `value` are not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedUpdate(e1, ExternMemberAccess(e2, "rank"), ExternMemberAccess(e3, "f3")))`)
     - if `t` is `ExternFunctionCall(e, args)` and some `arg` from `args` is `Extern<T>` then `arg` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternFunctionCall(e1, [ExternMemberAccess(e2, "f2")]))`)
 
-`ForeignRuntime` implementers **must not** override `eval_unsupported`.
+`ForeignRuntime` implementers **must not** override `evalDerived`.
 
 Example:
 
@@ -418,7 +426,7 @@ public class MockRT <: ForeignRuntime<MockRT> {
             case ExternMemberUpdate(_, _, _) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
             case ExternIndexedUpdate(_, _, _) => /* specific implementation of ExternIndexedUpdate */ throw ExternIndexedAccessException()
             case ExternFunctionCall(_, _) => /* specific implementation of ExternFunctionCall */ throw ExternFunctionAccessException()
-            case _ => ForeignRuntime<MockRT>.eval_unsupported(t) // <==== Calling `eval_unsupported` from `ForeignRuntime<MockRT>`
+            case _ => ForeignRuntime<MockRT>.evalDerived(t) // <==== Calling `evalDerived` from `ForeignRuntime<MockRT>`
         }
     }
     public static func fromExtern<R>(e: Extern<MockRT>): R { throw ExternConversionException() }
@@ -603,7 +611,7 @@ let name = T.fromExtern<String>(ExternMemberAccess(person, name))
 
 This optimization can be implemented immediately when desugaring or in CHIR.
 
-##### Optimization 2
+##### Optimization 2 <span id="optimization-2"></span>
 
 ```cangjie
 T.eval(E1)
@@ -638,7 +646,7 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 
     static func eval(t: Extern<T>): Extern<T>
 
-    static func eval_unsupported(t: Extern<T>): Extern<T> {
+    static func evalDerived(t: Extern<T>): Extern<T> {
         match (t) {
             case ExternSequence(e1, e2) =>
                 T.eval(e1)
@@ -697,17 +705,16 @@ For some valid implementation `class MockRT <: ForeignRuntime<MockRT> { ... }` t
 | Implicit toExtern | | `let x: Extern<MockRT> = 42` | Desugars to `MockRT.toExtern(42)` |
 | Forced cast success | `e: Extern<MockRT>`, `MockRT.fromExtern<String>` implemented | `let s: String = (String)e` | Desugars to `let s: String = MockRT.fromExtern<String>(e)` |
 | Forced cast type error |  | `(String)42` | Compile error:  `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions` |
-| Member access | `e: Extern<MockRT>` | `e.foo` | Desugars to `MockRT.memberAccess(e, "foo")`; type is `Extern<MockRT>` |
-| Member update | `e: Extern<MockRT>` | `e.foo = 42` | Desugars to `MockRT.memberUpdate(e, "foo", 42)`; type is Unit |
-| Index access | `e: Extern<MockRT>` | `e[0]` | Desugars to `MockRT.indexedAccess(e, 0)`; type is `Extern<MockRT>` |
-| Index update | `e: Extern<MockRT>` | `e[0] = "x"` | Desugars to `MockRT.indexedUpdate(e, 0, "x")`; type is Unit |
-| Function call | `e: Extern<MockRT>` | `e(1, 2)` | Desugars to `MockRT.functionCall(e, [1, 2])`; type is `Extern<MockRT>` |
-| Chained access | `e: Extern<MockRT>` | `e.a.b.c` | `MockRT.memberAccess(MockRT.memberAccess(MockRT.memberAccess(e, "a"), "b"), "c")` |
+| Member access | `e: Extern<MockRT>` | `e.foo` | Desugars to `MockRT.eval(ExternMemberAccess(e, "foo"))`; type is `Extern<MockRT>` |
+| Member update | `e: Extern<MockRT>` | `e.foo = 42` | Desugars to `MockRT.eval(ExternMemberUpdate(e, "foo", 42))`; type is Unit |
+| Index access | `e: Extern<MockRT>` | `e[0]` | Desugars to `MockRT.eval(ExternIndexedAccess(e, 0))`; type is `Extern<MockRT>` |
+| Index update | `e: Extern<MockRT>` | `e[0] = "x"` | Desugars to `MockRT.eval(ExternIndexedUpdate(e, 0, "x"))`; type is Unit |
+| Function call | `e: Extern<MockRT>` | `e(1, 2)` | Desugars to `MockRT.eval(ExternFunctionCall(e, [1, 2]))`; type is `Extern<MockRT>` |
+| Chained access | `e: Extern<MockRT>` | `e.a.b.c` | `MockRT.Eval(ExternMemberAccess(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"), "c"))` |
 | Conversion failure | `e: Extern<MockRT>`; `MockRT.fromExtern` doesn't know how to convert `e` to `Int32` | `(Int32)e` | Desugars to `MockRT.fromExtern<Int32>(e)`; type is `Int32`; throws `ExternConversionException` at runtime; |
-| Missing member | `e: Extern<MockRT>`; `MockRT.memberAccess` cannot access dynamic method `foo` | `e.foo` | Desugars to `MockRT.memberAccess(e, "foo")`; type is `Extern<MockRT>`; throws `ExternMemberAccessException` at runtime |
+| Missing member | `e: Extern<MockRT>`; `MockRT.eval(ExternMemberAccess(...))` cannot access dynamic method `foo` | `e.foo` | Desugars to `MockRT.eval(ExternMemberAccess(e, "foo"))`; type is `Extern<MockRT>`; throws `ExternMemberAccessException` at runtime |
 | Ambiguous parse | `f` is a function, not a type | `(f)(args)` | Parsed as ordinary call, not forced cast |
 | Ambiguous parse — call wins | `f` is a function, and a type | `(f)(args)` | Parsed as ordinary call, not forced cast |
-| Get payload | `e: Extern<MockRT>` | `Extern<MockRT>.getPayload(e)` | Returns `e.payload` |
 | Extern assign same type | `e1, e2: Extern<MockRT>` | `e1 = e2` | Normal assignment, no conversion |
 
 Test suite location: `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`
