@@ -188,7 +188,7 @@ func testCJ(runtime: JSContext, callInfo: JSCallInfo): Unit {
 ```cangjie
 func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
     let calculator = vm.calculator
-    let result: Float64 = (Float64)(calculator.add(2, 3.5))
+    let result: Float64 = (Float64)calculator.add(2, 3.5)
     println("Result: ${result}")
 }
 ```
@@ -240,7 +240,7 @@ flowchart TB
         OverflowStrategy["Overflow Strategy"]
         Mangling["Mangling"]
         SaveCJO["Save CJO"]
-        CHIR["CHIR (7)<br/><br/><p style='text-align:left'>handle intrinsics setExtern/getPayload</p>"]
+        CHIR["CHIR (7)<br/><br/><p style='text-align:left'>Extern optimizations</p>"]
         CodeGen["Code Generation"]
         SaveResults["Save Results"]
         style Parser fill:#fa7c5c
@@ -304,7 +304,7 @@ flowchart TB
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
 | `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. |
 | `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. |
-| `cangjie_compiler` - CHIR | (7) Translate `getPayload` intrinsic function call as a normal member field access, and `setExtern` intrinsic function call as a normal member field update.  |
+| `cangjie_compiler` - CHIR | (7) Extern optimizations.  |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
 No changes in the compiler backend or any specific OS-specific features.
@@ -313,7 +313,7 @@ No changes in the compiler backend or any specific OS-specific features.
 
 - **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, six exception classes — additive, no breaking change to existing APIs.
 - **New syntax:** Forced cast `(U)e` — purely additive.
-- **ABI:** `Extern<T>` is a `struct` holding an `Any` payload (similar to `Array`); stable across versions once released.
+- **ABI:** `Extern<T>` is a `non-exhaustive enum`; adding constructors at the end of an `non-exhaustive enum` doesn't break API/ABI compatibility.
 - **Backward compatibility:** Full compatible, including `ohos.ark_interop` code continues to work; migration is opt-in.
 
 ### External user perception
@@ -324,9 +324,9 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 
 | Aspect | Impact |
 | --- | --- |
-| **Compile time** | Parsing forced-cast, typing of Extern expressions and additional pass to desugar Extern expressions (+1300 loc); should negligible for typical projects |
+| **Compile time** | Parsing forced-cast, typing of Extern expressions and additional pass to desugar Extern expressions (~1500 loc); should negligible for typical projects |
 | **Runtime** | Each dynamic operation is a static call to `ForeignRuntime` method; runtime implementer is responsible for the design, implementation, and optimization of these methods |
-| **Space** | `Extern<T>` is a single `Any` payload per handle |
+| **Space** | Extern expressions are captured in a tree and evaluated at runtime. |
 
 ---
 
@@ -344,11 +344,11 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
     | ExternPayload(Any)
-    | ExternMemberAccess(Extern<T>, /* field */ String)
+    | ExternMemberAccess(Extern<T>,  /* field */ String)
     | ExternIndexedAccess(Extern<T>, /* index */ Any)
-    | ExternMemberUpdate(Extern<T>, /* field */ String, /* value */ Any)
-    | ExternIndexedUpdate(Extern<T>, /* index */ Any, /* value */ Any)
-    | ExternFunctionCall(Extern<T>, /* args */ Array<Any>)
+    | ExternMemberUpdate(Extern<T>,  /* field */ String, /* value */ Any)
+    | ExternIndexedUpdate(Extern<T>, /* index */ Any,    /* value */ Any)
+    | ExternFunctionCall(Extern<T>,  /* args  */ Array<Any>)
     | ...
 }
 ```
@@ -385,9 +385,9 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 | `ExternUnsupportedOperation` | Runtime implementer doesn't implement optimization |
 
 
-#### API contract
+#### API contract <span id="api-contract"></span>
 
-⚠️new: new subsection
+⚠️new: new section
 
 `ForeignRuntime` implementers **must** implement the following functions:
 
@@ -581,19 +581,112 @@ public class PythonRT2 <: PythonRT<PythonRT2> {}
 
 The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose two optimizations.
 
-##### Optimization 1: `evalAs<R>`
+##### Optimization 1
 
+`T.fromExtern<R>(T.eval(E))` can be optimized as `T.fromExtern<R>(E)`, avoiding the creation of an Extern value.
+
+###### Example
 Consider the following code, where `person` is of type `Extern<T>`.
-
 ```cangjie
 let name = (String)person.name
 ```
 
-The compiler desugars
+The compiler desugars as
+```cangjie
+let name = T.fromExtern<String>(T.eval(ExternMemberAccess(person, name)))
+```
 
+This can be optimized to
+```cangjie
+let name = T.fromExtern<String>(ExternMemberAccess(person, name))
+```
 
+This optimization can be implemented immediately when desugaring or in CHIR.
 
+##### Optimization 2
 
+```cangjie
+T.eval(E1)
+T.eval(E2)
+```
+
+The sequence of `T.eval` can be combined into a single operation so that there's one call to `T.eval` instead of two.
+
+For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API contract](#api-contract).
+
+First of all, we add a new constructor to the `Extern<T>` enum:
+
+```cangjie
+public enum Extern<T> where T <: ForeignRuntime<T> {
+    | ExternPayload(Any)
+    | ExternMemberAccess(Extern<T>,  /* field */ String)
+    | ExternIndexedAccess(Extern<T>, /* index */ Any)
+    | ExternMemberUpdate(Extern<T>,  /* field */ String, /* value */ Any)
+    | ExternIndexedUpdate(Extern<T>, /* index */ Any,    /* value */ Any)
+    | ExternFunctionCall(Extern<T>,  /* args  */ Array<Any>)
+    | ExternSequence(Extern<T>, Extern<T>)
+    | ...
+}
+```
+
+And now define the evaluation of `ExternSequence` in terms of the basic operations.
+
+```cangjie
+public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
+    static func fromExtern<R>(e: Extern<T>): R
+    static func toExtern<R>(v: R): Extern<T>
+
+    static func eval(t: Extern<T>): Extern<T>
+
+    static func eval_unsupported(t: Extern<T>): Extern<T> {
+        match (t) {
+            case ExternSequence(e1, e2) =>
+                T.eval(e1)
+                return T.eval(e2)
+            case _ => throw ExternUnsupportedOperation()
+        }
+    }
+}
+```
+
+`ForeignRuntime`s implementations are not required to support the `ExternSequence` constructor in their `eval` function if they adhere to the API contract.
+
+The compiler can now optimize expressions of the form
+
+```cangjie
+T.eval(E1)
+T.eval(E2)
+```
+
+into 
+
+```cangjie
+T.eval(ExternSequence(E1, E2))
+```
+
+Example:
+
+Let `e1` and `e2` be expressions with `Extern<T>` type. Then
+
+```cangjie
+e1.a = e2.foo()
+e1.a
+```
+
+is desugared as
+
+```cangjie
+T.eval(ExternMemberUpdate(e1, "a", ExternMemberAccess(e2, "foo")))
+T.eval(ExternMemberAccess(e1, "a"))
+```
+
+and optimized in CHIR as
+
+```cangjie
+T.eval(ExternSequence(ExternMemberUpdate(e1, "a", ExternMemberAccess(e2, "foo")), 
+       ExternMemberAccess(e1, "a"))
+      )
+```
 
 ## 4. Summary of Key DT Test Cases
 
