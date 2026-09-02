@@ -113,7 +113,7 @@ For a type `U` and an expression `exp`, `(U)exp` is desugared as
 
 Call intrinsic functions in the body of the constructor and `getPayload` instead of having the compiler handling them as a special case. Also specify explicitly that `getPayload(Extern<T>(x)) = x`.
 
-Fixed. See [`Extern<T>` struct](#externt-struct).
+Fixed. See [`Extern<T>` enum](#externt-enum).
 
 <br/>
 <br/>
@@ -256,7 +256,7 @@ flowchart TB
     end
 
     subgraph StdCore["std.core (1)"]
-        ExternType["Extern&lt;T&gt;<br/>struct"]
+        ExternType["Extern&lt;T&gt;<br/>enum"]
         Exc["Exception<br/>hierarchy"]
         FRT["ForeignRuntime&lt;T&gt;<br/>interface"]
         style ExternType fill:#fa7c5c
@@ -298,7 +298,7 @@ flowchart TB
 
 | Component | Role |
 | --- | --- |
-| `cangjie_runtime` - std.core | (1) New file [`extern_runtime.cj`](https://gitcode.com/claudio_/cangjie_runtime/blob/feature_extern_runtime/stdlib/libs/std/core/extern_runtime.cj) in `std.core` with `Extern<T>` struct, `ForeignRuntime<T>` interface, 7 new exceptions, and documentation about new public declarations. |
+| `cangjie_runtime` - std.core | (1) New file [`extern_runtime.cj`](https://gitcode.com/claudio_/cangjie_runtime/blob/feature_extern_runtime/stdlib/libs/std/core/extern_runtime.cj) in `std.core` with `Extern<T>` enum, `ForeignRuntime<T>` interface, 7 new exceptions, and documentation about new public declarations. |
 | `cangjie_runtime` - std.ast | (2) New `ForcedCastExpr <: Expr` class. Class declaration, flatbuffers serialization. |
 | `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to the type checking stage. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
@@ -311,7 +311,7 @@ No changes in the compiler backend or any specific OS-specific features.
 
 ### ABI/API compatibility
 
-- **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, six exception classes — additive, no breaking change to existing APIs.
+- **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, seven exception classes — additive, no breaking change to existing APIs.
 - **New syntax:** Forced cast `(U)e` — purely additive.
 - **ABI:** `Extern<T>` is a `non-exhaustive enum`; adding constructors at the end of an `non-exhaustive enum` doesn't break API/ABI compatibility.
 - **Backward compatibility:** Full compatible, including `ohos.ark_interop` code continues to work; migration is opt-in.
@@ -337,7 +337,7 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 **New file:** `stdlib/libs/std/core/extern_runtime.cj`
 
 
-#### `Extern<T>` struct <span id="externt-struct"></span>
+#### `Extern<T>` enum <span id="externt-enum"></span>
 
 ⚠️new: changed `Extern` definition
 
@@ -422,7 +422,7 @@ public class MockRT <: ForeignRuntime<MockRT> {
         match (t) {
             case ExternPayload(_) => t
             case ExternMemberAccess(e, f) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
-            case ExternIndexedAccess(_, _) => /* specific implementation of ExternIndexAccess */ throw ExternIndexedAccessException()
+            case ExternIndexedAccess(_, _) => /* specific implementation of ExternIndexedAccess */ throw ExternIndexedAccessException()
             case ExternMemberUpdate(_, _, _) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
             case ExternIndexedUpdate(_, _, _) => /* specific implementation of ExternIndexedUpdate */ throw ExternIndexedAccessException()
             case ExternFunctionCall(_, _) => /* specific implementation of ExternFunctionCall */ throw ExternFunctionAccessException()
@@ -450,7 +450,7 @@ public class MockRT <: ForeignRuntime<MockRT> {
 #### Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
 
 - **Parse:** `ForcedCastExpr` AST node holds both readings (e.g. during parsing we don't know if `(U)(e)` is forced cast or function call).
-- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime`.; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
+- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime<T>`.; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
 - **Disambiguation:** If `U` is a type, `(U)(e)` is a forced cast; if `U` is an expression, then `(U)(e)` is function application.
 - **Desugar:** `(U)e` → `T.fromExtern<U>(e)`.
 
@@ -474,7 +474,7 @@ foo(..., 42, ...)
 is desugared into
 
 ```cangjie
-func foo(x: Extern<R>) {...}
+func foo(..., x: Extern<R>, ...) {...}
 foo(..., R.toExtern<Int64>(42), ...)
 ```
 
@@ -730,4 +730,4 @@ The `Extern<T>` feature introduces a language-level interoperability mechanism t
 3. Provides precise, typed exceptions for foreign operation failures.
 4. Generalizes beyond ArkTS to any foreign runtime.
 
-The compiler implementation ([Git code PR #1871](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)) adds forced cast parsing, `DesugarExtern.cpp`, and Sema support. The standard library adds `Extern<T>`, `ForeignRuntime<T>`, and six exception classes to `std.core`. CI validation has passed.
+The compiler implementation ([Git code PR #1871](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)) adds forced cast parsing, `DesugarExtern.cpp`, and Sema support. The standard library adds `Extern<T>`, `ForeignRuntime<T>`, and seven exception classes to `std.core`. CI validation has passed.
