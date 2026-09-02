@@ -405,7 +405,7 @@ The goal of `evalDerived` is to define how the derived constructors are evaluate
 2. `static func toExtern<R>(v: R): Extern<T>`
     - must throw `ExternConversionException` if a conversion exception occurs.
 3. `static func eval(t: Extern<T>): Extern<T>`
-    - must handle the Extern constructors `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`
+    - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`
     - must call `evalDerived` in the default case.
     - if `t` is `ExternIndexedAccess(e, index)` and `index is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedAccess(e1, ExternMemberAccess(e2, "rank")))`)
     - if `t` is `ExternMemberUpdate(e, field, value)` and `value is Extern<T>`, then `value` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
