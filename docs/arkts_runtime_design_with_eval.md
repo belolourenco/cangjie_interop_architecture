@@ -448,22 +448,14 @@ A Cangjie value used where
 ### `toJSValue`: Cangjie value → `JSValue`
 
 This bind-thread helper converts assigned values, call arguments, indexes, and values passed
-to `toExtern`. An `Extern<T>` input must already be an evaluated `ExternPayload`; another
-expression node is rejected. Other values are converted according to their runtime type.
-The `Imm`/`Ref` decision is deferred to `retain`.
+to `toExtern`. An `Extern<T>` input is reduced with `evalTree`, so it may be an unevaluated
+expression node. Other values are converted according to their runtime type. The `Imm`/`Ref`
+decision is deferred to `retain`.
 
 ```cangjie
 private static func toJSValue(value: Any): JSValue {
     if (value is Extern<T>) {
-        let external = (value as Extern<T>).getOrThrow()
-        return match (external) {
-            case ExternPayload(payload) =>
-                match ((payload as ArkTSHandle).getOrThrow()) {
-                    case Imm(value) => value
-                    case Ref(owner) => owner.toJSValue()
-                }
-            case _ => throw ExternConversionException("Expected an evaluated ArkTS value")
-        }
+        return evalTree((value as Extern<T>).getOrThrow())
     }
     if (value is (Extern<T>) -> Extern<T>) {
         let callback = (value as ((Extern<T>) -> Extern<T>)).getOrThrow()
@@ -491,12 +483,14 @@ private static func toJSValue(value: Any): JSValue {
 
 Notes:
 
-- An `Extern<T>` from the same concrete runtime is projected from its payload without a
-  copy. An unevaluated node is rejected, and an `Extern` belonging to another ArkTS
+- An `Extern<T>` from the same concrete runtime goes through `evalTree`: an evaluated
+  payload is projected without a copy, and an unevaluated node is evaluated first, in the
+  scope of the surrounding evaluation. An `Extern` belonging to another ArkTS
   specialization does not match this branch.
 - A Cangjie callback of type `(Extern<T>) -> Extern<T>` becomes a JS function. On
   invocation, all JS arguments are collected into one array and passed to the callback as
-  an evaluated `Extern<T>`. The callback must also return an evaluated payload.
+  an evaluated `Extern<T>`. Its result goes through `toJSValue`, so the callback may return
+  either a payload or an unevaluated node.
 - `Int64` is widened to `Float64` because JS numbers are doubles.
 - Supported arrays are arrays of `Int64`, `Float64`, `Bool`,
   `String`, or same-runtime `Extern<T>`. `arrayJSValue<E>` maps each element through
