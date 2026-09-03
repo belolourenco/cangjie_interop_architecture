@@ -493,55 +493,44 @@ Notes:
 - `Int64` is widened to `Float64` because JS numbers are doubles.
 - Supported arrays are arrays of `Int64`, `Float64`, `Bool`,
   `String`, or same-runtime `Extern<T>`. `arrayJSValue<E>` maps each element through
-  `toJSValue`; other array types are rejected.
+  `toJSValue`; other array types are rejected for now.
 
 ### `toExtern`: Cangjie value → `Extern<T>`
 
-The implicit-conversion hook returns an existing `Extern<T>` unchanged, whether it is a
-tree or a `ExternPayload`. Other values are converted and retained as evaluated payloads.
+The implicit-conversion `toExtern` simply calls `toJSValue` and `retain`s the value.
 
 ```cangjie
 public static func toExtern<R>(value: R): Extern<T> {
-    if (value is Extern<T>) {
-        return (value as Extern<T>).getOrThrow()
-    }
     run { retain(toJSValue(value)) }
 }
 ```
 
 ### `fromExtern`: `Extern<T>` → Cangjie type `R`
 
-The forced-cast hook `(R)e` receives the evaluated result of the dynamic expression. It
-projects the payload to a `JSValue`, then uses the `ark_interop` reader for target type `R`.
+The forced-cast hook `(R)e` reduces its argument with `evalTree`, so it accepts a payload
+as well as an unevaluated node, then uses the `ark_interop` reader for target type `R`.
 
 ```cangjie
 public static func fromExtern<R>(e: Extern<T>): R {
     run {
-        match (e) {
-            case ExternPayload(p) =>
-                let value = match ((p as ArkTSHandle).getOrThrow()) {
-                    case Imm(value) => value
-                    case Ref(owner) => owner.toJSValue()
+        let value = evalTree(e)
+        match (None<R>) {    // dummy `None<R>` to match the type parameter
+            case _: Option<Bool>    => (value.toBoolean() as R).getOrThrow()
+            case _: Option<Int32>   => (Int32(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int32
+            case _: Option<Int64>   => (Int64(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int64
+            case _: Option<Float64> => (value.toNumber() as R).getOrThrow()
+            case _: Option<String>  => (value.toString() as R).getOrThrow()
+            case _: Option<BigInt>  => (value.toBigInt() as R).getOrThrow()
+            case _: Option<Unit> => (() as R).getOrThrow()
+            case _: Option<Array<String>> =>
+                let array = value.asArray()
+                let converted = Array<String>(array.size) { index =>
+                    array[index].toString()
                 }
-                match (None<R>) {    // dummy `None<R>` to match the type parameter
-                    case _: Option<Bool>    => (value.toBoolean() as R).getOrThrow()
-                    case _: Option<Int32>   => (Int32(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int32
-                    case _: Option<Int64>   => (Int64(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int64
-                    case _: Option<Float64> => (value.toNumber() as R).getOrThrow()
-                    case _: Option<String>  => (value.toString() as R).getOrThrow()
-                    case _: Option<BigInt>  => (value.toBigInt() as R).getOrThrow()
-                    case _: Option<Unit> => (() as R).getOrThrow()
-                    case _: Option<Array<String>> =>
-                        let array = value.asArray()
-                        let converted = Array<String>(array.size) { index =>
-                            array[index].toString()
-                        }
-                        (converted as R).getOrThrow()
-                    case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
-                    case _ => throw ExternConversionException(
-                        "Unsupported conversion from ArkTS")
-                }
-            case _ => throw ExternConversionException("Expected an evaluated ArkTS value")
+                (converted as R).getOrThrow()
+            case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
+            case _ => throw ExternConversionException(
+                "Unsupported conversion from ArkTS")
         }
     }
 }
