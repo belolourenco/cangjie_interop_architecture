@@ -343,11 +343,13 @@ private static func evalTree(tree: Extern<T>): JSValue {
 
 ### Indexed access
 
-Index operations accept an integer position, a `String` property name, or an evaluated
-`Extern<T>` from the same runtime. The `Extern<T>` must be a `ExternPayload`; another expression
-node is rejected. Existing `JSKeyable` handles, such as strings and symbols, are reused;
-other ArkTS values are converted to strings. `writeIndex` resolves this key before
-converting the assigned value, preserving target–index–value evaluation order.
+Index operations accept an integer position, a `String` property name, or an `Extern<T>`
+from the same runtime. The `Extern<T>` is a tree node like any other, so it may be an
+unevaluated expression; `toJSKeyable` reduces it with `evalTree`, inside the same scope as
+the surrounding evaluation, and maps the result onto one of the `JSKeyable` types accepted
+by `getProperty` and `setProperty`: a string becomes a `JSString`, a symbol a `JSSymbol`,
+and a number a `Float64`. `writeIndex` resolves this key before converting the assigned
+value, preserving target–index–value evaluation order.
 
 ```cangjie
 private static func readIndex(target: JSValue, index: Any): JSValue {
@@ -374,18 +376,11 @@ private static func writeIndex(target: JSValue, index: Any, value: Any): Unit {
 }
 
 private static func toJSKeyable(index: Extern<T>): JSKeyable {
-    match (index) {
-        case ExternPayload(payload) =>
-            match ((payload as ArkTSHandle).getOrThrow()) {
-                case Imm(value) => value.toString()
-                case Ref(owner) =>
-                    match (owner) {
-                        case key: JSKeyable => key
-                        case _ => owner.toJSValue().toString()
-                    }
-            }
-        case _ => throw ExternIndexedAccessException("Expected an evaluated ArkTS index")
-    }
+    let value = evalTree(index)
+    if (value.isString()) { return value.asString() }  // JSString
+    if (value.isSymbol()) { return value.asSymbol() }  // JSSymbol
+    if (value.isNumber()) { return value.toNumber() }  // Float64
+    throw ExternIndexedAccessException("Unsupported ArkTS index type")
 }
 ```
 
