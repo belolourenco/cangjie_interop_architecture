@@ -59,6 +59,10 @@ let a: Float64 = (Float64)blob.area()
 The compiler lowers the dynamic operations as follows:
 
 ```cangjie
+ArkTS.bind(context)                  // bind this runtime instance at entry
+
+// ...
+
 let blob = ArkTS.eval(
     ExternFunctionCall(ExternMemberAccess(api, "createRectangle"), []))
 
@@ -107,7 +111,7 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
     }
 
     // ...
-    
+
 }
 ```
 
@@ -237,9 +241,6 @@ private enum ArkTSHandle {
 | `Imm` | a `JSValue` | Immediates have no heap identity, so the value is stored as-is. |
 | `Ref` | a `JSHeapObject` | Heap values are pinned as a process-global so they survive across calls. |
 
-`JSValue` is `ark_interop`'s tagged engine value: either an immediate or a pointer into the
-heap.
-
 ### Wrapping a JSValue as an Extern
 
 `retain` is the single entry that turns a `JSValue` produced by the engine into an
@@ -271,14 +272,37 @@ The compiler represents dynamic syntax as nested `Extern<T>` nodes and calls `T.
 for the complete expression:
 
 ```cangjie
-e.f       → T.eval(ExternMemberAccess(e, "f"))
-e[i]      → T.eval(ExternIndexedAccess(e, i))
-e.f = v   → T.eval(ExternMemberUpdate(e, "f", v))
-e[i] = v  → T.eval(ExternIndexedUpdate(e, i, v))
-e(a, b)   → T.eval(ExternFunctionCall(e, [a, b]))
+e.f                   → T.eval(ExternMemberAccess(e, "f"))
+e[i]                  → T.eval(ExternIndexedAccess(e, i))
+e.f = v               → T.eval(ExternMemberUpdate(e, "f", v))
+e[i] = v              → T.eval(ExternIndexedUpdate(e, i, v))
+e(a, b)               → T.eval(ExternFunctionCall(e, [a, b]))
 
-a.b.c     → T.eval(ExternMemberAccess(ExternMemberAccess(a, "b"), "c"))
-a.m(10)   → T.eval(ExternFunctionCall(ExternMemberAccess(a, "m"), [10]))
+a.b.c                 → T.eval(ExternMemberAccess(ExternMemberAccess(a, "b"), "c"))
+a.m(10)               → T.eval(ExternFunctionCall(ExternMemberAccess(a, "m"), [10]))
+
+a.b(42).c = d.e().f() → T.eval(
+    ExternMemberUpdate(
+        ExternFunctionCall(
+            ExternMemberAccess(a, "b"),
+            [42]
+        ),
+        "c",
+        ExternFunctionCall(
+            ExternMemberAccess(
+                ExternFunctionCall(
+                    ExternMemberAccess(
+                        d,
+                        "e"
+                    ),
+                    []
+                ),
+                "f"
+            ),
+            []
+        )
+    )
+)
 ```
 
 Constructing the tree performs no engine work. `eval` enters `run` once, recursively
@@ -935,28 +959,7 @@ case ExternMemberUpdate(target, field, value) =>
 A future `ARKTS_SetPropertyPath` must read every field except the last, convert `value`,
 and then update the last field, preserving the existing evaluation and exception order.
 
-### Direct typed evaluation
-
-A cast currently dispatches twice and retains a result between `eval` and `fromExtern`:
-
-```cangjie
-ArkTS.fromExtern<Float64>(ArkTS.eval(tree))
-```
-
-A compiler/runtime extension can reduce and convert in one scope:
-
-```cangjie
-public static func evalAs<R>(tree: Extern<T>): R {
-    run { fromJSValue<R>(evalTree(tree)) }
-}
-
-// → ArkTS.evalAs<Float64>(tree)
-```
-
-This removes the second `run` and avoids creating a global handle for a heap result that
-is immediately converted to a Cangjie value.
-
-### Send the entire `Extern` tree at once
+### Not part of the current proposal, but possible: Send the entire `Extern` tree at once
 
 Consider the following expression, where `e` has type `Extern<T>`:
 
@@ -977,7 +980,7 @@ Even in the best case, evaluating this tree requires three FFI calls:
 3. `ExternMemberAccess(..., c)` via `ARKTS_GetProperty(...)`.
 
 To reduce this to a single FFI call, Cangjie can encode the entire expression tree as a
-`@C`-compatible value and send it to the C side for evaluation.
+`@C`-compatible value (or simply serialize it) and send it to the C side for evaluation.
 
 Because the C side ultimately interprets the expression, Cangjie can serialize the
 `Extern` tree as a flat post-order sequence: each operand appears before the operation
