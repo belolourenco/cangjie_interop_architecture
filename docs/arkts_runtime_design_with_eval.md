@@ -39,8 +39,6 @@ flowchart TB
     UC["User: e.f / e(...) / e[i]"] --> DS["cjc builds Extern tree"]
     DS --> EVAL["T.eval(tree)"]
     EVAL --> ARK["ArkTS&lt;T&gt; <: ForeignRuntime&lt;T&gt;"]
-    ARK --> PAY["ExternPayload(ArkTSHandle: Imm | Ref)"]
-    ARK --> RUN["run: JS-thread dispatch"]
     ARK -->|"v1"| CTX["ohos.ark_interop"] --> FFI["ARKTS_*"] --> VM["ArkTS VM"]
     ARK -.->|"v2"| FFI
 ```
@@ -622,7 +620,7 @@ public static func requireSystemNativeModule(
 
 ---
 
-## 8. Lifetime
+## 8. Values Lifetime
 
 Heap-valued `JSValue`s are local handles and must be created inside an engine scope. The
 scope must remain open until an escaping result has passed through `retain`; closing it
@@ -631,9 +629,7 @@ valid.
 
 ### Scope ownership
 
-Opening a scope only in `eval` is not a complete design: `toExtern`, `fromExtern`, module
-loading, and several helpers also create or project local heap values. The scope policy
-must therefore cover every operation that enters `ark_interop`. There are two coherent
+The scope policy must therefore cover every operation that enters `ark_interop`. There are two coherent
 ownership models.
 
 #### Runtime-managed scopes
@@ -711,10 +707,8 @@ a global before the scope closes. Thus `run` may return a retained `Extern`, a g
 immediate, or a Cangjie value, but it must never return an unretained heap `JSValue`.
 
 This model opens one scope for every call to `run`, including calls that happen to use
-only immediate values. The open/close functions are `@FastNative`, however, and an
-evaluation tree still incurs one pair for the whole tree rather than one pair per node.
-The boundary is a `run` call rather than a source expression: for example,
-`(Float64)blob.area()` performs one scoped `run` for `eval` and another for `fromExtern`.
+only immediate values. Under the wood, the `newScope` is implemented by wrapping the 
+execution of the lambda argument inside open/close `@FastNative` FFI function calls.
 
 #### Caller-managed scopes
 
@@ -744,8 +738,7 @@ let blob = ArkTS.withScope {
 Calls made inside the block see that they are already on the bind thread, so their nested
 calls to the dispatch-only `run` execute inline. Temporary local handles from all four
 operations are released when `withScope` returns. The returned `blob` remains valid
-because any heap value escaping in an `Extern` has been promoted to a global. A raw heap
-`JSValue`, by contrast, must not escape the callback.
+because any heap value escaping in an `Extern` has been promoted to a global.
 
 This approach amortizes both dispatch and scope creation across the block, but it makes
 correctness depend on user discipline. An operation made outside `withScope` may have no
@@ -861,8 +854,7 @@ additional engine resources, although they may refer to payloads elsewhere in th
 | `Imm` | engine immediate | none |
 | `Ref` | `JSHeapObject` global | finalizer → `ARKTS_DisposeGlobal` |
 
-## Optimizations
-
+## 9. Optimizations
 
 ### Batched member access
 
