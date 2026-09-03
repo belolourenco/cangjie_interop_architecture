@@ -392,6 +392,7 @@ evaluated function. `call` uses the target of a `ExternMemberAccess` or `ExternI
 
 ```cangjie
 a.m(10)           // ExternFunctionCall(ExternMemberAccess(a, "m"), [10]): this = a
+
 let x = a.m
 x(20)             // ExternFunctionCall(x, [20]): this = undefined
 ```
@@ -454,30 +455,28 @@ decision is deferred to `retain`.
 
 ```cangjie
 private static func toJSValue(value: Any): JSValue {
-    if (value is Extern<T>) {
-        return evalTree((value as Extern<T>).getOrThrow())
+    match (value) {
+        case external: Extern<T> => evalTree(external)
+        case callback: ((Extern<T>) -> Extern<T>) =>
+            context.function({ _, info =>
+                let arguments = Array<JSValue>(info.count) { index => info[index] }
+                let externalArguments = retain(context.array(arguments).toJSValue())
+                let result = callback(externalArguments)
+                toJSValue(result)
+            }).toJSValue()
+        case boolean: Bool    => context.boolean(boolean).toJSValue()
+        case number: Int32    => context.number(number).toJSValue()
+        case number: Int64    => context.number(Float64(number)).toJSValue()
+        case number: Float64  => context.number(number).toJSValue()
+        case text: String     => context.string(text).toJSValue()
+        case number: BigInt   => context.bigint(number).toJSValue()
+        case items: Array<Int64>      => arrayJSValue(items)
+        case items: Array<Float64>    => arrayJSValue(items)
+        case items: Array<Bool>       => arrayJSValue(items)
+        case items: Array<String>     => arrayJSValue(items)
+        case items: Array<Extern<T>>  => arrayJSValue(items)
+        case _ => throw ExternConversionException("Unsupported conversion to ArkTS")
     }
-    if (value is (Extern<T>) -> Extern<T>) {
-        let callback = (value as ((Extern<T>) -> Extern<T>)).getOrThrow()
-        return context.function({ _, info =>
-            let arguments = Array<JSValue>(info.count) { index => info[index] }
-            let externalArguments = retain(context.array(arguments).toJSValue())
-            let result = callback(externalArguments)
-            toJSValue(result)
-        }).toJSValue()
-    }
-    if (value is Bool)    { return context.boolean((value as Bool).getOrThrow()).toJSValue() }
-    if (value is Int32)   { return context.number((value as Int32).getOrThrow()).toJSValue() }
-    if (value is Int64)   { return context.number(Float64((value as Int64).getOrThrow())).toJSValue() }
-    if (value is Float64) { return context.number((value as Float64).getOrThrow()).toJSValue() }
-    if (value is String)  { return context.string((value as String).getOrThrow()).toJSValue() }
-    if (value is BigInt)  { return context.bigint((value as BigInt).getOrThrow()).toJSValue() }
-    if (value is Array<Int64>)         { return arrayJSValue((value as Array<Int64>).getOrThrow()) }
-    if (value is Array<Float64>)       { return arrayJSValue((value as Array<Float64>).getOrThrow()) }
-    if (value is Array<Bool>)          { return arrayJSValue((value as Array<Bool>).getOrThrow()) }
-    if (value is Array<String>)        { return arrayJSValue((value as Array<String>).getOrThrow()) }
-    if (value is Array<Extern<T>>)     { return arrayJSValue((value as Array<Extern<T>>).getOrThrow()) }
-    throw ExternConversionException("Unsupported conversion to ArkTS")
 }
 ```
 
