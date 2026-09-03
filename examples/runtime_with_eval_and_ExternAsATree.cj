@@ -8,12 +8,12 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 
 public enum Extern<T> where T <: ForeignRuntime<T> {
-    | Payload(Any)
-    | MemberAccess(Extern<T>, String)
-    | IndexedAccess(Extern<T>, Any)
-    | MemberUpdate(Extern<T>, String, Any)
-    | IndexedUpdate(Extern<T>, Any, Any)
-    | FuncCall(Extern<T>, Array<Any>)
+    | ExternPayload(Any)
+    | ExternMemberAccess(Extern<T>, String)
+    | ExternIndexedAccess(Extern<T>, Any)
+    | ExternMemberUpdate(Extern<T>, String, Any)
+    | ExternIndexedUpdate(Extern<T>, Any, Any)
+    | ExternFunctionCall(Extern<T>, Array<Any>)
 }
 
 main () {
