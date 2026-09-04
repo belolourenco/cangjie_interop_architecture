@@ -323,44 +323,75 @@ a.b(42).c = d.e().f() → T.eval(
 )
 ```
 
-Constructing the tree performs no engine work. `eval` enters `run` once, recursively
-reduces the tree to a local `JSValue`, and retains only the result. An existing `ExternPayload`
-is already evaluated and can be returned unchanged.
+Constructing the tree performs no engine work. For a primitive operation, `eval` enters
+`run` once, evaluates the operation to a `JSValue`, and retains its result. `evalTree`
+performs the same operations recursively, so top-level and nested primitive operations
+have identical semantics while only the top-level result is retained. An existing `ExternPayload` is already
+evaluated and can be returned unchanged. A derived constructor is delegated to the
+standard `ForeignRuntime<T>.evalDerived` implementation, as required by the
+`ForeignRuntime` contract.
 
 ```cangjie
 public static func eval(tree: Extern<T>): Extern<T> {
     match (tree) {
         case ExternPayload(_) => tree
-        case _ => run { retain(evalTree(tree)) }
+        case ExternMemberAccess(target, field) =>
+            run { retain(evalTree(target).getProperty(field)) }
+        case ExternIndexedAccess(target, index) =>
+            run { retain(readIndex(evalTree(target), index)) }
+        case ExternMemberUpdate(target, field, value) =>
+            run { retain(evalMemberUpdate(target, field, value)) }
+        case ExternIndexedUpdate(target, index, value) =>
+            run { retain(evalIndexedUpdate(target, index, value)) }
+        case ExternFunctionCall(callee, arguments) =>
+            run { retain(call(callee, arguments)) }
+        case _ => ForeignRuntime<T>.evalDerived(tree)
     }
 }
 
 private static func evalTree(tree: Extern<T>): JSValue {
     match (tree) {
-        case ExternPayload(h) => match ((h as ArkTSHandle).getOrThrow()) {
-            case Imm(value) => value
-            case Ref(owner) => owner.toJSValue()
-        }
+        case ExternPayload(handle) => evalPayload(handle)
         case ExternMemberAccess(target, field) =>
-            let v1 = evalTree(target)
-            v1.getProperty(field)
+            evalTree(target).getProperty(field)
         case ExternIndexedAccess(target, index) =>
-            let v1 = evalTree(target)
-            readIndex(v1, index)
+            readIndex(evalTree(target), index)
         case ExternMemberUpdate(target, field, value) =>
-            let v1 = evalTree(target)
-            v1.setProperty(field, toJSValue(value))
-            context.undefined().toJSValue()
+            evalMemberUpdate(target, field, value)
         case ExternIndexedUpdate(target, index, value) =>
-            let v1 = evalTree(target)
-            writeIndex(v1, index, value)
-            context.undefined().toJSValue()
+            evalIndexedUpdate(target, index, value)
         case ExternFunctionCall(callee, arguments) =>
             call(callee, arguments)
-        case _ => evalDerived(tree)
+        case _ =>
+            evalTree(ForeignRuntime<T>.evalDerived(tree))
     }
 }
+
+private static func evalPayload(handle: Any): JSValue {
+    match ((handle as ArkTSHandle).getOrThrow()) {
+        case Imm(value) => value
+        case Ref(owner) => owner.toJSValue()
+    }
+}
+
+private static func evalMemberUpdate(target: Extern<T>, field: String, value: Any): JSValue {
+    let receiver = evalTree(target)
+    receiver.setProperty(field, toJSValue(value))
+    context.undefined().toJSValue()
+}
+
+private static func evalIndexedUpdate(target: Extern<T>, index: Any, value: Any): JSValue {
+    let receiver = evalTree(target)
+    writeIndex(receiver, index, value)
+    context.undefined().toJSValue()
+}
+
 ```
+
+When a derived constructor is nested inside a primitive tree, `evalTree` delegates that
+subtree to `evalDerived` and projects the evaluated `Extern<T>` result back to a local
+`JSValue`. Any `T.eval` calls made by `evalDerived` use the normal ArkTS dispatch and scope
+policy; for a nested derived constructor, dispatch already runs on the bind thread.
 
 ### Indexed access
 
@@ -549,7 +580,7 @@ public static func fromExtern<R>(e: Extern<T>): R {
                     array[index].toString()
                 }
                 (converted as R).getOrThrow()
-            case _: Option<Extern<T>> => (value as R).getOrThrow()                       // identity: no conversion
+            case _: Option<Extern<T>> => (retain(value) as R).getOrThrow()           // identity: no conversion
             case _ => throw ExternConversionException(
                 "Unsupported conversion from ArkTS")
         }
