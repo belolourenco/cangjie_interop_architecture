@@ -257,7 +257,10 @@ private enum ArkTSHandle {
 | Variant | Holds | Why |
 | --- | --- | --- |
 | `Imm` | a `JSValue` | Immediates have no heap identity, so the value is stored as-is. |
-| `Ref` | a `JSHeapObject` | Heap values are pinned as a process-global so they survive across calls. |
+| `Ref` | a `JSHeapObject` | Heap values are pinned as an engine-global so they survive across calls. |
+
+`JSHeapObject` finalizers queue `ARKTS_DisposeGlobal` for execution on the context's bind
+thread, so the finalizers themselves may run on any thread.
 
 ### Wrapping a JSValue as an Extern
 
@@ -873,15 +876,16 @@ Values produced while reducing a tree remain local and only its final result is 
 Consequently, a chain such as `a.b.c.d` does not create a global handle for each member
 access.
 
-An evaluated `ExternPayload(Imm(...))` needs no disposal. `ExternPayload(Ref(...))` owns an engine
-global and releases it when the payload is finalized. Unevaluated operation nodes own no
-additional engine resources, although they may refer to payloads elsewhere in the tree.
+An evaluated `ExternPayload(Imm(...))` needs no disposal. `ExternPayload(Ref(...))` owns an
+engine global whose `JSHeapObject` finalizer queues disposal on the context's bind thread.
+Unevaluated operation nodes own no additional engine resources, although they may refer to
+payloads elsewhere in the tree.
 
 | Kind | Storage | Dispose |
 | --- | --- | --- |
 | Intermediate `JSValue` | current engine scope | when that scope closes |
 | `Imm` | engine immediate | none |
-| `Ref` | `JSHeapObject` global | finalizer → `ARKTS_DisposeGlobal` |
+| `Ref` | `JSHeapObject` global | `JSHeapObject` finalizer |
 
 ## 9. Optimizations
 
