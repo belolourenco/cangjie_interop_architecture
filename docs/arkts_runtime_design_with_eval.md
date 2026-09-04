@@ -82,20 +82,30 @@ evaluator when it performs the update.
 ArkTS runtime.
 
 `JSContext` is the `ark_interop` handle to one ArkTS/JS engine instance. Each concrete
-specialization can be bound to its own context. This permits multiple ArkTS foreign
+specialization can be bound to exactly one context. This permits multiple ArkTS foreign
 runtimes, such as `ArkTS1 <: ArkTS<ArkTS1>` and `ArkTS2 <: ArkTS<ArkTS2>`, without mixing
-their values: `Extern<ArkTS1>` and `Extern<ArkTS2>` are different types. `bind` installs
-the context for that specialization. The evaluator and helpers read it through the private
+their values: `Extern<ArkTS1>` and `Extern<ArkTS2>` are different types. The first
+successful call to `bind` permanently installs the context for that specialization. Every
+later call throws `ArkTSContextAlreadyBoundException`, even if it supplies the same
+`JSContext`. The evaluator and helpers read the installed context through the private
 `context` property, which throws if the runtime was never bound.
 
 ```cangjie
 public class ArkTSContextNotBoundException <: Exception {}
+public class ArkTSContextAlreadyBoundException <: Exception {}
 
 abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
+    private static let contextMutex = Mutex()
     private static var context_: ?JSContext = None
 
-    public static func bind(context: JSContext): Unit {
-        context_ = context
+    public static func bind(newContext: JSContext): Unit {
+        synchronized(contextMutex) {
+            match (context_) {
+                case None => context_ = Some(newContext)
+                case Some(_) => throw ArkTSContextAlreadyBoundException(
+                    "ArkTS runtime is already associated with a host JSContext")
+            }
+        }
     }
 
     private static prop context: JSContext {
@@ -103,7 +113,7 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
             match (context_) {
                 case Some(context) => context
                 case None => throw ArkTSContextNotBoundException(
-                    "ArkTS is not associated with a host JSContext")
+                    "ArkTS runtime is not associated with a host JSContext")
             }
         }
     }
@@ -125,7 +135,17 @@ Each specialization can then be bound to its own context:
 ```cangjie
 ArkTS1.bind(context1)
 ArkTS2.bind(context2)
+
+ArkTS1.bind(context1) // throws ArkTSContextAlreadyBoundException
 ```
+
+There is deliberately no `unbind` or context-replacement operation. Code that needs a
+different `JSContext` must define and bind a different concrete specialization. This keeps
+every `ArkTSHandle` associated with the same engine for its entire lifetime. The mutex
+makes the initial check-and-install atomic, ensuring that exactly one concurrent call to
+`bind` can succeed. A context lookup that races with the successful initial bind may still
+observe `None` and throw `ArkTSContextNotBoundException`; a caller that requires the bind
+to be visible must wait until `bind` has completed before using the runtime.
 
 ---
 
@@ -337,6 +357,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
             context.undefined().toJSValue()
         case ExternFunctionCall(callee, arguments) =>
             call(callee, arguments)
+        case _ => evalDerived(tree)
     }
 }
 ```
@@ -528,7 +549,7 @@ public static func fromExtern<R>(e: Extern<T>): R {
                     array[index].toString()
                 }
                 (converted as R).getOrThrow()
-            case _: Option<Extern<T>> => (e as R).getOrThrow()                       // identity: no conversion
+            case _: Option<Extern<T>> => (value as R).getOrThrow()                       // identity: no conversion
             case _ => throw ExternConversionException(
                 "Unsupported conversion from ArkTS")
         }

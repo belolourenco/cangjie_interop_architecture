@@ -779,9 +779,9 @@ For some valid implementation `class MockRT <: ForeignRuntime<MockRT> { ... }` t
 | Forced cast success | `e: Extern<MockRT>`, `MockRT.fromExtern<String>` implemented | `let s: String = (String)e` | Desugars to `let s: String = MockRT.fromExtern<String>(e)` |
 | Forced cast type error |  | `(String)42` | Compile error:  `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions` |
 | Member access | `e: Extern<MockRT>` | `e.foo` | Desugars to `MockRT.eval(ExternMemberAccess(e, "foo"))`; type is `Extern<MockRT>` |
-| Member update | `e: Extern<MockRT>` | `e.foo = 42` | Desugars to `MockRT.eval(ExternMemberUpdate(e, "foo", 42))`; type is Unit |
+| Member update | `e: Extern<MockRT>` | `e.foo = 42` | Desugars to `MockRT.eval(ExternMemberUpdate(e, "foo", 42))`; type is `Extern<MockRT>` |
 | Index access | `e: Extern<MockRT>` | `e[0]` | Desugars to `MockRT.eval(ExternIndexedAccess(e, 0))`; type is `Extern<MockRT>` |
-| Index update | `e: Extern<MockRT>` | `e[0] = "x"` | Desugars to `MockRT.eval(ExternIndexedUpdate(e, 0, "x"))`; type is Unit |
+| Index update | `e: Extern<MockRT>` | `e[0] = "x"` | Desugars to `MockRT.eval(ExternIndexedUpdate(e, 0, "x"))`; type is `Extern<MockRT>` |
 | Function call | `e: Extern<MockRT>` | `e(1, 2)` | Desugars to `MockRT.eval(ExternFunctionCall(e, [1, 2]))`; type is `Extern<MockRT>` |
 | Chained access | `e: Extern<MockRT>` | `e.a.b.c` | `MockRT.Eval(ExternMemberAccess(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"), "c"))` |
 | Conversion failure | `e: Extern<MockRT>`; `MockRT.fromExtern` doesn't know how to convert `e` to `Int32` | `(Int32)e` | Desugars to `MockRT.fromExtern<Int32>(e)`; type is `Int32`; throws `ExternConversionException` at runtime; |
