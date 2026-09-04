@@ -583,6 +583,79 @@ public class PythonRT1 <: PythonRT<PythonRT1> {}
 public class PythonRT2 <: PythonRT<PythonRT2> {}
 ```
 
+#### Runtime implementer possible optimizations
+
+⚠️new: new section
+
+Because `eval` / `fromExtern` receive an `Extern` *tree* (nested operands are not pre-evaluated), the runtime can specialize common shapes.
+
+##### Possible optimization 1: path access
+
+```cangjie
+e.a.b.c
+// T.eval(ExternMemberAccess(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"), "c"))
+```
+
+A naive `eval` costs one FFI call and one intermediate handle per member access (3 of each here). The runtime can instead resolve the whole path `["a", "b", "c"]` on `e` in a single call, with no intermediate `Extern` / global handles.
+
+##### Possible optimization 2: short lifetime for intermediate values
+
+```cangjie
+e.a.b(c.d, f[0]).g
+// T.eval(ExternMemberAccess(
+//     ExternFunctionCall(
+//         ExternMemberAccess(ExternMemberAccess(e, "a"), "b"),
+//         [ExternMemberAccess(c, "d"), ExternIndexedAccess(f, 0)]),
+//     "g"))
+```
+
+A naive `eval` promotes every nested access, call, and argument to a global handle (6 here). Only the result of the whole expression is visible to Cangjie, so the intermediates can stay local and be released when `eval` returns.
+
+##### Possible optimization 3: intern field names
+
+```cangjie
+e.foo
+e.foo
+// T.eval(ExternMemberAccess(e, "foo"))
+// T.eval(ExternMemberAccess(e, "foo"))
+```
+
+A naive `eval` converts the Cangjie string `"foo"` into a foreign string on every access. Interning it as a reusable foreign string removes that conversion from all later accesses of the same field name.
+
+##### Possible optimization 4: cache converted strings
+
+```cangjie
+let e1: Extern<T> = "foo"
+let e2: Extern<T> = "foo"
+// T.toExtern<String>("foo")
+// T.toExtern<String>("foo")
+```
+
+A naive `toExtern` allocates and converts the same Cangjie string twice. Caching the foreign string keyed by the Cangjie value turns the second conversion into a lookup; the dual is `fromExtern<String>(e)` on the same immutable foreign string.
+
+##### Possible optimization 5: bulk conversion of aggregates
+
+```cangjie
+let a: Extern<T> = [1, 2, 3]
+// T.toExtern<Array<Int64>>([1, 2, 3])
+```
+
+A naive `toExtern` builds the foreign array one element at a time. Copying the buffer in one go costs a single FFI call for the whole array; the dual is `(Array<Int64>)a` in `fromExtern`.
+
+##### Possible optimization 6: send the whole tree in one FFI call
+
+```cangjie
+e.a.b(c.d, f[0]).g
+// T.eval(ExternMemberAccess(
+//     ExternFunctionCall(
+//         ExternMemberAccess(ExternMemberAccess(e, "a"), "b"),
+//         [ExternMemberAccess(c, "d"), ExternIndexedAccess(f, 0)]),
+//     "g"))
+```
+
+A naive `eval` crosses the FFI boundary once per constructor (6 times here), and optimization 1 fuses only pure member paths. Encoding the tree and evaluating it on the C / VM side handles a mixed member / index / call expression in a single crossing.
+
+
 #### Compiler Optimizations
 
 ⚠️new: new section
