@@ -39,315 +39,6 @@ public class ArkTS3 <: ArkTS<ArkTS3> {}
 
 # Examples
 
-## Helper functions defined in arkcompiler_cangjie_ark_interop/ohos/ark_interop_helper/ark_api_call_async.cj
-
-### jsGlobalApiCall
-
-```cangjie
-protected func jsGlobalApiCall<T>(moduleName: String, modulePrefix: ?String, funcName: String,
-    args: (JSContext) -> Array<JSValue>, onResolve: (JSContext, JSValue) -> T): T {
-    func call(context: JSContext): T {
-        let jsModule = getJSModule(context, moduleName, modulePrefix)
-        let jsRet = jsModule.callMethod(funcName, args(context))
-        onResolve(context, jsRet)
-    }
-    checkThreadAndCall<T>(getMainContext(), call)
-}
-```
-
-TODO: mention the differences:
-1. `getMainContext()` vs generic argument `Runtime`
-2. args `(JSContext) -> Array<JSValue>` vs `Array<Extern<Runtime>>`
-
->> ```cangjie
->> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
->>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
->>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
->>     //             `jsModule.funcName` not possible because `funcName` is not a literal
->>     let function = Runtime.eval(MemberAccess(jsModule, funcName))
->>     //          `function[args]` is not the same!
->>     let jsRet = Runtime.eval(FuncCall(function, args)) // this will run on the main thread
->>     onResolve(jsRet)
->> }
->> ```
-
-In this case, the desugaring has no effect on  the code above.
-
->> ```cangjie
->> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
->>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
->>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
->>     //             `jsModule.funcName` not possible because `funcName` is not a literal
->>     let function = Runtime.eval(MemberAccess(jsModule, funcName))
->>     //          `function[args]` is not the same!
->>     let jsRet = Runtime.eval(FuncCall(function, args)) // this will run on the main thread
->>     onResolve(jsRet)
->> }
->> ```
-
-
-### hmsGlobalApiCall
-
-```cangjie
-protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (JSContext) -> Array<JSValue>,
-    onResolve: (JSContext, JSValue) -> T): T {
-    jsGlobalApiCall<T>(moduleName, "hms", funcName, args, onResolve)
-}
-```
-
-> ```cangjie
-> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
->     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
->     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
-> }
-> ```
-
->> ```cangjie
->> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
->>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
->>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
->> }
->> ```
-
->>> ```cangjie
->>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
->>>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
->>>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
->>> }
->>> ```
-
-### hmsGlobalApiCall
-
-```cangjie
-protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (JSContext) -> Array<JSValue>): T where T <: JSInteropType<T> {
-    hmsGlobalApiCall<T>(moduleName, funcName, args) {ctx, res => T.fromJSValue(ctx, res)}
-}
-```
-
-> ```cangjie
-> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
->     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => (T)res }
-> }
-> ```
-
->> ```cangjie
->> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
->>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
->> }
->> ```
-
->>> ```cangjie
->>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
->>>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
->>> }
->>> ```
-
-## Global Functions
-
-```cangjie
-public func greeter(fn: (a: String) -> Unit): Unit {
-    hmsGlobalApiCall < Unit >( "_ark_interop_api", "greeter", { ctx =>[ctx.function({ ctx, callInfo =>
-            let p0 = String.fromJSValue(ctx, callInfo[0])
-            fn(p0)
-            ctx.undefined().toJSValue()
-        }).toJSValue()] })
-}
-```
-
-Notes about the above:
-
-1. The ArkTS declaration is `declare function greeter(fn: (a: string) => void): void`. The generated Cangjie wrapper must pass `fn` as a JS function.
-2. `hmsGlobalApiCall`'s third argument is not `fn`. It is an args builder of type `args: (JSContext) -> Array<JSValue>`.
-3. `ctx.function({ ctx, callInfo => ... })` is what translates `fn` into ArkTS. It builds a `JSLambda` (note that `type JSLambda = (JSContext, JSCallInfo) -> JSValue`) and then a `JSFunction`.
-4. that `JSFunction` is then passed to the ArkTS function `greeter` as the only argument.
-
-> ```cangjie
-> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
->             let p0: String = (String)callInfo[0]
->             fn(p0)
->             Runtime.undefined()
->         }])
-> }
-> ```
-
->> ```cangjie
->> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
->>             let p0: String = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
->>             fn(p0)
->>             Runtime.undefined()
->>         }])
->> }
->> ```
-
->>> ```cangjie
->>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
->>>             let p0: String = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
->>>             fn(p0)
->>>             Runtime.undefined()
->>>         }])
->>> }
->>> ```
-
-Note: as opposed to the `ark_interop` library we can immediately translate the arguments because we already have access to the `Runtime`.
-
-OR, inlining functions
-
-> ```cangjie
-> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->     let efn: Extern<Runtime> = { callInfo: Extern<Runtime> =>
->         let p0 = (String)callInfo[0]
->         fn(p0)
->         Runtime.undefined()
->     }
->     let res = jsModule.greeter(efn)
->     (Unit)res
-> }
-> ```
-
->> ```cangjie
->> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
->>         let p0 = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
->>         fn(p0)
->>         Runtime.undefined()
->>     })
->>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "greeter"), [efn])
->>     Runtime.fromExtern<Unit>(res)
->> }
->> ```
-
->>> ```cangjie
->>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
->>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
->>>         let p0 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
->>>         fn(p0)
->>>         Runtime.undefined()
->>>     })
->>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "greeter"), [efn]))
->>>     Runtime.fromExtern<Unit>(res)
->>> }
->>> ```
-
-```cangjie
-/**
-* @brief printToConsole(s: string): void
-*/
-public func printToConsole(s: String): Unit {
-    hmsGlobalApiCall < Unit >( "_ark_interop_api", "printToConsole", { ctx =>[s.toJSValue(ctx)] })
-}
-```
-
-> ```cangjie
-> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
-> }
-> ```
-
->> ```cangjie
->> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
->> }
->> ```
-
->>> ```cangjie
->>> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->>>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
->>> }
->>> ```
-
-OR, inlining functions
-
-> ```cangjie
-> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->     let res = jsModule.printToConsole(s) // implicit conversion String -> Extern<Runtime>
->     (Unit)res
-> }
-> ```
-
->> ```cangjie
->> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "printToConsole"), [s]) // implicit conversion String -> Extern<Runtime>
->>     Runtime.fromExtern<Unit>(res)
->> }
->> ```
-
->>> ```cangjie
->>> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
->>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
->>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "printToConsole"), [s])) // implicit conversion String -> Extern<Runtime>
->>>     Runtime.fromExtern<Unit>(res)
->>> }
->>> ```
-
-```cangjie
-/**
-  * @brief testMultiGenericT(t: T, m: M): T
-  */
-public func testMultiGenericT < T, M >(t: T, m: M): T where T <: JSInteropType<T>, M <: JSInteropType<M> {
-    hmsGlobalApiCall < T >( "my_module_genericFunction", "testMultiGenericT", { ctx =>[t.toJSValue(ctx), m.toJSValue(ctx)] }) {
-        ctx, res => T.fromJSValue(ctx, res)
-    }
-}
-```
-
-> ```cangjie
-> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
->         res: Extern<Runtime> => (T)res
->     }
-> }
-> ```
-
->> ```cangjie
->> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
->>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
->>     }
->> }
->> ```
-
->>> ```cangjie
->>> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->>>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
->>>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
->>>     }
->>> }
->>> ```
-
-OR, inlining functions
-
-> ```cangjie
-> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
->     let res = jsModule.testMultiGenericT(t, m) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
->     (T)res
-> }
-> ```
-
->> ```cangjie
->> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
->>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "testMultiGenericT"), [t, m]) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
->>     Runtime.fromExtern<T>(res)
->> }
->> ```
-
->>> ```cangjie
->>> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
->>>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
->>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "testMultiGenericT"), [t, m])) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
->>>     Runtime.fromExtern<T>(res)
->>> }
->>> ```
-
 
 ## Basic Types
 
@@ -440,28 +131,28 @@ public class GreetingSettings {
 >>
 >>     public func toExtern(): Extern<Runtime> {
 >>         let obj = Runtime.object()
->>         Runtime.memberUpdate(obj, "greeting", greeting)
+>>         Runtime.eval(MemberUpdate(obj, "greeting", greeting))
 >>         if(let Some(v) <- duration) {
->>             Runtime.memberUpdate(obj, "duration", v)
+>>             Runtime.eval(MemberUpdate(obj, "duration", v))
 >>         }
 >>         if(let Some(v) <- color) {
->>             Runtime.memberUpdate(obj, "color", v)
+>>             Runtime.eval(MemberUpdate(obj, "color", v))
 >>         }
 >>         obj
 >>     }
 >>
 >>     public static func fromExtern(input: Extern<Runtime>): GreetingSettings<Runtime> {
 >>         GreetingSettings(
->>             Runtime.fromExtern<String>(Runtime.memberAccess(input, "greeting")),
->>             duration: if(Runtime.isUndefined(Runtime.memberAccess(input, "duration"))) {
+>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "greeting"))),
+>>             duration: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "duration")))) {
 >>                 None
 >>             } else {
->>                 Runtime.fromExtern<Float64>(Runtime.memberAccess(input, "duration"))
+>>                 Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "duration")))
 >>             },
->>             color: if(Runtime.isUndefined(Runtime.memberAccess(input, "color"))) {
+>>             color: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "color")))) {
 >>                 None
 >>             } else {
->>                 Runtime.fromExtern<String>(Runtime.memberAccess(input, "color"))
+>>                 Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "color")))
 >>             }
 >>         )
 >>     }
@@ -469,53 +160,11 @@ public class GreetingSettings {
 >> }
 >> ```
 
->>> ```cangjie
->>> public class GreetingSettings<Runtime> where Runtime <: ArkTS<Runtime> {
->>>
->>>     protected GreetingSettings(
->>>         public var greeting: String,
->>>         public var duration!: Option<Float64> = None,
->>>         public var color!: Option<String> = None
->>>     ) {}
->>>
->>>     public func toExtern(): Extern<Runtime> {
->>>         let obj = Runtime.object()
->>>         Runtime.eval(MemberUpdate(obj, "greeting", greeting))
->>>         if(let Some(v) <- duration) {
->>>             Runtime.eval(MemberUpdate(obj, "duration", v))
->>>         }
->>>         if(let Some(v) <- color) {
->>>             Runtime.eval(MemberUpdate(obj, "color", v))
->>>         }
->>>         obj
->>>     }
->>>
->>>     public static func fromExtern(input: Extern<Runtime>): GreetingSettings<Runtime> {
->>>         GreetingSettings(
->>>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "greeting"))),
->>>             duration: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "duration")))) {
->>>                 None
->>>             } else {
->>>                 Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "duration")))
->>>             },
->>>             color: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "color")))) {
->>>                 None
->>>             } else {
->>>                 Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "color")))
->>>             }
->>>         )
->>>     }
->>>
->>> }
->>> ```
-
-| | Number of Characters (no comments) | Diff |
+| | Number of lexical tokens | Diff |
 | --- | --- | --- |
-| ohos.ark_interop | 850 |  |
-| sugared version | 718 | -132 |
-| desugared: current extern | 975 | +125 |
-| desugared: extern with eval | 1023 | +173 |
-
+| ohos.ark_interop | 223 |  |
+| sugared version | 190 | -33 |
+| desugared: extern with eval | 269 | +46 |
 
 ## Optional Properties
 
@@ -2493,3 +2142,312 @@ public enum EventType <: ToString & Equatable < EventType > {
     }
 }
 ```
+## Helper functions defined in arkcompiler_cangjie_ark_interop/ohos/ark_interop_helper/ark_api_call_async.cj
+
+### jsGlobalApiCall
+
+```cangjie
+protected func jsGlobalApiCall<T>(moduleName: String, modulePrefix: ?String, funcName: String,
+    args: (JSContext) -> Array<JSValue>, onResolve: (JSContext, JSValue) -> T): T {
+    func call(context: JSContext): T {
+        let jsModule = getJSModule(context, moduleName, modulePrefix)
+        let jsRet = jsModule.callMethod(funcName, args(context))
+        onResolve(context, jsRet)
+    }
+    checkThreadAndCall<T>(getMainContext(), call)
+}
+```
+
+TODO: mention the differences:
+1. `getMainContext()` vs generic argument `Runtime`
+2. args `(JSContext) -> Array<JSValue>` vs `Array<Extern<Runtime>>`
+
+>> ```cangjie
+>> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
+>>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
+>>     //             `jsModule.funcName` not possible because `funcName` is not a literal
+>>     let function = Runtime.eval(MemberAccess(jsModule, funcName))
+>>     //          `function[args]` is not the same!
+>>     let jsRet = Runtime.eval(FuncCall(function, args)) // this will run on the main thread
+>>     onResolve(jsRet)
+>> }
+>> ```
+
+In this case, the desugaring has no effect on  the code above.
+
+>> ```cangjie
+>> protected func jsGlobalApiCall<Runtime, T>(moduleName: String, modulePrefix: ?String, funcName: String,
+>>     args: Array<Extern<Runtime>>, onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule(moduleName, modulePrefix)
+>>     //             `jsModule.funcName` not possible because `funcName` is not a literal
+>>     let function = Runtime.eval(MemberAccess(jsModule, funcName))
+>>     //          `function[args]` is not the same!
+>>     let jsRet = Runtime.eval(FuncCall(function, args)) // this will run on the main thread
+>>     onResolve(jsRet)
+>> }
+>> ```
+
+
+### hmsGlobalApiCall
+
+```cangjie
+protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (JSContext) -> Array<JSValue>,
+    onResolve: (JSContext, JSValue) -> T): T {
+    jsGlobalApiCall<T>(moduleName, "hms", funcName, args, onResolve)
+}
+```
+
+> ```cangjie
+> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
+>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
+> }
+> ```
+
+>> ```cangjie
+>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
+>>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>,
+>>>     onResolve: (Extern<Runtime>) -> T): T where Runtime <: ArkTS<Runtime> {
+>>>     jsGlobalApiCall<Runtime, T>(moduleName, "hms", funcName, args, onResolve)
+>>> }
+>>> ```
+
+### hmsGlobalApiCall
+
+```cangjie
+protected func hmsGlobalApiCall<T>(moduleName: String, funcName: String, args: (JSContext) -> Array<JSValue>): T where T <: JSInteropType<T> {
+    hmsGlobalApiCall<T>(moduleName, funcName, args) {ctx, res => T.fromJSValue(ctx, res)}
+}
+```
+
+> ```cangjie
+> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => (T)res }
+> }
+> ```
+
+>> ```cangjie
+>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> func hmsGlobalApiCall<Runtime, T>(moduleName: String, funcName: String, args: Array<Extern<Runtime>>): Extern<Runtime> where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall<Runtime, T>(moduleName, funcName, args) { res => Runtime.fromExtern<T>(res) }
+>>> }
+>>> ```
+
+## Global Functions
+
+```cangjie
+public func greeter(fn: (a: String) -> Unit): Unit {
+    hmsGlobalApiCall < Unit >( "_ark_interop_api", "greeter", { ctx =>[ctx.function({ ctx, callInfo =>
+            let p0 = String.fromJSValue(ctx, callInfo[0])
+            fn(p0)
+            ctx.undefined().toJSValue()
+        }).toJSValue()] })
+}
+```
+
+Notes about the above:
+
+1. The ArkTS declaration is `declare function greeter(fn: (a: string) => void): void`. The generated Cangjie wrapper must pass `fn` as a JS function.
+2. `hmsGlobalApiCall`'s third argument is not `fn`. It is an args builder of type `args: (JSContext) -> Array<JSValue>`.
+3. `ctx.function({ ctx, callInfo => ... })` is what translates `fn` into ArkTS. It builds a `JSLambda` (note that `type JSLambda = (JSContext, JSCallInfo) -> JSValue`) and then a `JSFunction`.
+4. that `JSFunction` is then passed to the ArkTS function `greeter` as the only argument.
+
+> ```cangjie
+> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>             let p0: String = (String)callInfo[0]
+>             fn(p0)
+>             Runtime.undefined()
+>         }])
+> }
+> ```
+
+>> ```cangjie
+>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>>             let p0: String = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
+>>             fn(p0)
+>>             Runtime.undefined()
+>>         }])
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
+>>>             let p0: String = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>             fn(p0)
+>>>             Runtime.undefined()
+>>>         }])
+>>> }
+>>> ```
+
+Note: as opposed to the `ark_interop` library we can immediately translate the arguments because we already have access to the `Runtime`.
+
+OR, inlining functions
+
+> ```cangjie
+> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>     let efn: Extern<Runtime> = { callInfo: Extern<Runtime> =>
+>         let p0 = (String)callInfo[0]
+>         fn(p0)
+>         Runtime.undefined()
+>     }
+>     let res = jsModule.greeter(efn)
+>     (Unit)res
+> }
+> ```
+
+>> ```cangjie
+>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
+>>         let p0 = Runtime.fromExtern<String>(Runtime.indexedAccess(callInfo, 0))
+>>         fn(p0)
+>>         Runtime.undefined()
+>>     })
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "greeter"), [efn])
+>>     Runtime.fromExtern<Unit>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
+>>>         let p0 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>         fn(p0)
+>>>         Runtime.undefined()
+>>>     })
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "greeter"), [efn]))
+>>>     Runtime.fromExtern<Unit>(res)
+>>> }
+>>> ```
+
+```cangjie
+/**
+* @brief printToConsole(s: string): void
+*/
+public func printToConsole(s: String): Unit {
+    hmsGlobalApiCall < Unit >( "_ark_interop_api", "printToConsole", { ctx =>[s.toJSValue(ctx)] })
+}
+```
+
+> ```cangjie
+> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+> }
+> ```
+
+>> ```cangjie
+>> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func printToConsole<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall <Runtime, Unit >( "_ark_interop_api", "printToConsole", [s])
+>>> }
+>>> ```
+
+OR, inlining functions
+
+> ```cangjie
+> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>     let res = jsModule.printToConsole(s) // implicit conversion String -> Extern<Runtime>
+>     (Unit)res
+> }
+> ```
+
+>> ```cangjie
+>> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "printToConsole"), [s]) // implicit conversion String -> Extern<Runtime>
+>>     Runtime.fromExtern<Unit>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func printToConsole2<Runtime>(s: String): Unit where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "printToConsole"), [s])) // implicit conversion String -> Extern<Runtime>
+>>>     Runtime.fromExtern<Unit>(res)
+>>> }
+>>> ```
+
+```cangjie
+/**
+  * @brief testMultiGenericT(t: T, m: M): T
+  */
+public func testMultiGenericT < T, M >(t: T, m: M): T where T <: JSInteropType<T>, M <: JSInteropType<M> {
+    hmsGlobalApiCall < T >( "my_module_genericFunction", "testMultiGenericT", { ctx =>[t.toJSValue(ctx), m.toJSValue(ctx)] }) {
+        ctx, res => T.fromJSValue(ctx, res)
+    }
+}
+```
+
+> ```cangjie
+> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+>         res: Extern<Runtime> => (T)res
+>     }
+> }
+> ```
+
+>> ```cangjie
+>> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+>>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
+>>     }
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func testMultiGenericT <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>>     hmsGlobalApiCall <Runtime, T >( "my_module_genericFunction", "testMultiGenericT", [t, m]) {
+>>>         res: Extern<Runtime> => Runtime.fromExtern<T>(res)
+>>>     }
+>>> }
+>>> ```
+
+OR, inlining functions
+
+> ```cangjie
+> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+>     let res = jsModule.testMultiGenericT(t, m) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
+>     (T)res
+> }
+> ```
+
+>> ```cangjie
+>> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+>>     let res = Runtime.functionCall(Runtime.memberAccess(jsModule, "testMultiGenericT"), [t, m]) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
+>>     Runtime.fromExtern<T>(res)
+>> }
+>> ```
+
+>>> ```cangjie
+>>> public func testMultiGenericT2 <Runtime, T, M >(t: T, m: M): T where Runtime <: ArkTS<Runtime> {
+>>>     let jsModule = Runtime.getModule("my_module_genericFunction", "hms")
+>>>     let res = Runtime.eval(FuncCall(MemberAccess(jsModule, "testMultiGenericT"), [t, m])) // implicit conversion T -> Extern<Runtime>, M -> Extern<Runtime>
+>>>     Runtime.fromExtern<T>(res)
+>>> }
+>>> ```
+
