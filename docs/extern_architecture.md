@@ -407,10 +407,10 @@ The goal of `evalDerived` is to define how the derived constructors are evaluate
 3. `static func eval(t: Extern<T>): Extern<T>`
     - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`
     - must call `evalDerived` in the default case.
-    - if `t` is `ExternIndexedAccess(e, index)` and `index is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedAccess(e1, ExternMemberAccess(e2, "rank")))`)
-    - if `t` is `ExternMemberUpdate(e, field, value)` and `value is Extern<T>`, then `value` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
-    - if `t` is `ExternIndexedUpdate(e, index, value)` and `index is Extern<T>`, then `index` and `value` are not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedUpdate(e1, ExternMemberAccess(e2, "rank"), ExternMemberAccess(e3, "f3")))`)
-    - if `t` is `ExternFunctionCall(e, args)` and some `arg` from `args` is `Extern<T>` then `arg` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternFunctionCall(e1, [ExternMemberAccess(e2, "f2")]))`)
+    - if `t` is `ExternIndexedAccess(e, index)` then `e` is not guaranteed to be evaluated; furthermore, if `index is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedAccess(e1, ExternMemberAccess(e2, "rank")))`)
+    - if `t` is `ExternMemberUpdate(e, field, value)` then `e` is not guaranteed to be evaluated; furthermore, if `value is Extern<T>`, then `value` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
+    - if `t` is `ExternIndexedUpdate(e, index, value)` then `e` is not guaranteed to be evaluated; furthermore, if `index is Extern<T>`, then `index` and `value` are not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedUpdate(e1, ExternMemberAccess(e2, "rank"), ExternMemberAccess(e3, "f3")))`)
+    - if `t` is `ExternFunctionCall(e, args)` then `e` is not guaranteed to be evaluated; furthermore, if a `arg` from `args` is `Extern<T>` then `arg` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.evalExternFunctionCall(e1, [ExternMemberAccess(e2, "f2")]))`)
 
 `ForeignRuntime` implementers **must not** override `evalDerived`.
 
