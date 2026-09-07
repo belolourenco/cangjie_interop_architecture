@@ -143,16 +143,16 @@ public class GreetingSettings {
 >>
 >>     public static func fromExtern(input: Extern<Runtime>): GreetingSettings<Runtime> {
 >>         GreetingSettings(
->>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "greeting"))),
+>>             Runtime.fromExtern<String>(MemberAccess(input, "greeting")),
 >>             duration: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "duration")))) {
 >>                 None
 >>             } else {
->>                 Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "duration")))
+>>                 Runtime.fromExtern<Float64>(MemberAccess(input, "duration"))
 >>             },
 >>             color: if(Runtime.isUndefined(Runtime.eval(MemberAccess(input, "color")))) {
 >>                 None
 >>             } else {
->>                 Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "color")))
+>>                 Runtime.fromExtern<String>(MemberAccess(input, "color"))
 >>             }
 >>         )
 >>     }
@@ -164,7 +164,7 @@ public class GreetingSettings {
 | --- | --- | --- |
 | ohos.ark_interop | 223 |  |
 | sugared version | 190 | -33 |
-| desugared: extern with eval | 269 | +46 |
+| desugared: extern with eval | 254 | +31 |
 
 ## Optional Properties
 
@@ -241,7 +241,7 @@ public class Product {
 >>         price: if (Runtime.isUndefined(Runtime.eval(MemberAccess(input, "price")))) {
 >>             None
 >>         } else {
->>             Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "price")))
+>>             Runtime.fromExtern<Float64>(MemberAccess(input, "price"))
 >>         }
 >>         )
 >>     }
@@ -253,7 +253,7 @@ public class Product {
 | --- | --- | --- |
 | ohos.ark_interop | 128 |  |
 | sugared version | 117 | -11 |
-| desugared: extern with eval | 146 | +18 |
+| desugared: extern with eval | 141 | +13 |
 
 
 ## Readonly Properties
@@ -316,8 +316,8 @@ public class Point {
 >>
 >>     public static func fromJSValue(input: Extern<Runtime>): Point<Runtime> {
 >>         Point(
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "x"))),
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "y")))
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "x")),
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "y"))
 >>         )
 >>     }
 >> }
@@ -327,7 +327,7 @@ public class Point {
 | --- | --- | --- |
 | ohos.ark_interop | 120 |  |
 | sugared version | 98 | -22 |
-| desugared: extern with eval | 140 | +20 |
+| desugared: extern with eval | 130 | +10 |
 
 
 ## Member Functions
@@ -404,7 +404,7 @@ public class Person {
 >>
 >>     public mut prop name: String {
 >>         get() {
->>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "name")))
+>>             Runtime.fromExtern<String>(MemberAccess(arkts_object, "name"))
 >>         }
 >>         set(v) {
 >>             Runtime.eval(MemberUpdate(arkts_object, "name", v))
@@ -413,7 +413,7 @@ public class Person {
 >>     }
 >>
 >>     public func greet(): String {
->>         Runtime.fromExtern<String>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "greet"), [])))
+>>         Runtime.fromExtern<String>(FuncCall(MemberAccess(arkts_object, "greet"), []))
 >>     }
 >>
 >>     func toExtern(): Extern<Runtime> {
@@ -430,7 +430,7 @@ public class Person {
 | --- | --- | --- |
 | ohos.ark_interop | 146 |  |
 | sugared version | 109 | -37 |
-| desugared: extern with eval | 147 | +1 |
+| desugared: extern with eval | 137 | -9 |
 
 
 ## Function Overloading
@@ -504,13 +504,13 @@ public class Calculator {
 >>     * @brief add(x: number,y: number): number
 >>     */
 >>     public func add(x: Float64, y: Float64): Float64 {
->>         Runtime.fromExtern<Float64>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "add"), [x, y])))
+>>         Runtime.fromExtern<Float64>(FuncCall(MemberAccess(arkts_object, "add"), [x, y]))
 >>     }
 >>     /**
 >>     * @brief add(x: string,y: string): String
 >>     */
 >>     public func add(x: String, y: String): String {
->>         Runtime.fromExtern<String>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "add"), [x, y])))
+>>         Runtime.fromExtern<String>(FuncCall(MemberAccess(arkts_object, "add"), [x, y]))
 >>     }
 >>
 >>     func toExtern(): Extern<Runtime> {
@@ -527,7 +527,7 @@ public class Calculator {
 | --- | --- | --- |
 | ohos.ark_interop | 145 |  |
 | sugared version | 116 | -29 |
-| desugared: extern with eval | 150 | +5 |
+| desugared: extern with eval | 140 | -5 |
 
 
 ## Array Types
@@ -612,7 +612,7 @@ public class List {
 >>
 >>     public mut prop items: Array<String> {
 >>         get() {
->>             Runtime.fromExtern<Array<String>>(Runtime.eval(MemberAccess(arkts_object, "items")))
+>>             Runtime.fromExtern<Array<String>>(MemberAccess(arkts_object, "items"))
 >>         }
 >>         set(v) {
 >>             Runtime.eval(MemberUpdate(arkts_object, "items", v))
@@ -642,7 +642,7 @@ public class List {
 | --- | --- | --- |
 | ohos.ark_interop | 169 |  |
 | sugared version | 116 | -53 |
-| desugared: extern with eval | 148 | -21 |
+| desugared: extern with eval | 143 | -26 |
 
 
 ## Inheritance
@@ -705,7 +705,7 @@ public open class A {
 >>     
 >>     public static func fromExtern(input: Extern<Runtime>): A<Runtime> {
 >>         A(
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p")))
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "p"))
 >>         )
 >>     }
 >>     
@@ -716,7 +716,7 @@ public open class A {
 | --- | --- | --- |
 | ohos.ark_interop | 93 |  |
 | sugared version | 82 | -11 |
-| desugared: extern with eval | 103 | +10 |
+| desugared: extern with eval | 98 | +5 |
 
 
 ```cangjie
@@ -797,8 +797,8 @@ public open class B <: A {
 >>     
 >>     public static func fromExtern(input: Extern<Runtime>): B<Runtime> {
 >>         B(
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p"))),
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p1")))
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "p")),
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "p1"))
 >>         )
 >>     }
 >>     
@@ -809,7 +809,7 @@ public open class B <: A {
 | --- | --- | --- |
 | ohos.ark_interop | 126 |  |
 | sugared version | 107 | -19 |
-| desugared: extern with eval | 149 | +23 |
+| desugared: extern with eval | 139 | +13 |
 
 
 ```cangjie
@@ -1036,7 +1036,7 @@ public open class E <: A {
 >>     
 >>     public static func fromExtern(input: Extern<Runtime>): E<Runtime> {
 >>         E(
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "p")))
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "p"))
 >>         )
 >>     }
 >>     
@@ -1047,7 +1047,7 @@ public open class E <: A {
 | --- | --- | --- |
 | ohos.ark_interop | 97 |  |
 | sugared version | 89 | -8 |
-| desugared: extern with eval | 110 | +13 |
+| desugared: extern with eval | 105 | +8 |
 
 
 ```cangjie
@@ -1207,8 +1207,8 @@ public open class AutoGenType0 {
 >>     
 >>     public static func fromExtern(input: Extern<Runtime>): AutoGenType0<Runtime> {
 >>         AutoGenType0(
->>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "city"))),
->>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "zipCode")))
+>>         Runtime.fromExtern<String>(MemberAccess(input, "city")),
+>>         Runtime.fromExtern<String>(MemberAccess(input, "zipCode"))
 >>         )
 >>     }
 >>     
@@ -1219,7 +1219,7 @@ public open class AutoGenType0 {
 | --- | --- | --- |
 | ohos.ark_interop | 118 |  |
 | sugared version | 100 | -18 |
-| desugared: extern with eval | 142 | +24 |
+| desugared: extern with eval | 132 | +14 |
 
 
 ```cangjie
@@ -1296,8 +1296,8 @@ public open class UserProfile {
 >>     
 >>     public static func fromExtern(input: Extern<Runtime>): UserProfile<Runtime> {
 >>         UserProfile(
->>         Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(input, "id"))),
->>         Runtime.fromExtern<String>(Runtime.eval(MemberAccess(input, "name"))),
+>>         Runtime.fromExtern<Float64>(MemberAccess(input, "id")),
+>>         Runtime.fromExtern<String>(MemberAccess(input, "name")),
 >>         AutoGenType0.fromExtern(Runtime.eval(MemberAccess(input, "address")))
 >>         )
 >>     }
@@ -1309,7 +1309,7 @@ public open class UserProfile {
 | --- | --- | --- |
 | ohos.ark_interop | 151 |  |
 | sugared version | 127 | -24 |
-| desugared: extern with eval | 185 | +34 |
+| desugared: extern with eval | 175 | +24 |
 
 
 ## Union Type Aliases
@@ -1476,7 +1476,7 @@ public class Greeter {
 >>
 >>     public mut prop greeting: String {
 >>         get() {
->>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "greeting")))
+>>             Runtime.fromExtern<String>(MemberAccess(arkts_object, "greeting"))
 >>         }
 >>         set(v) {
 >>             Runtime.eval(MemberUpdate(arkts_object, "greeting", v))
@@ -1505,7 +1505,7 @@ public class Greeter {
 | --- | --- | --- |
 | ohos.ark_interop | 199 |  |
 | sugared version | 127 | -72 |
-| desugared: extern with eval | 172 | -27 |
+| desugared: extern with eval | 167 | -32 |
 
 
 ## Static Members
@@ -1589,7 +1589,7 @@ public class MathUtils {
 >>     public mut prop PI: Float64 {
 >>         get() {
 >>             let module = Runtime.getModule("test", None)
->>             Runtime.fromExtern<Float64>(Runtime.eval(MemberAccess(MemberAccess(module, "MathUtils"), "PI")))
+>>             Runtime.fromExtern<Float64>(MemberAccess(MemberAccess(module, "MathUtils"), "PI"))
 >>         }
 >>         set(v) {
 >>             let module = Runtime.getModule("test", None)
@@ -1603,7 +1603,7 @@ public class MathUtils {
 >>     */
 >>     public static func square(x: Float64): Float64 {
 >>         let module = Runtime.getModule("test", None)
->>         Runtime.fromExtern<Float64>(Runtime.eval(FuncCall(MemberAccess(MemberAccess(module, "MathUtils"), "square"), [x])))
+>>         Runtime.fromExtern<Float64>(FuncCall(MemberAccess(MemberAccess(module, "MathUtils"), "square"), [x]))
 >>     }
 >>
 >>     // ...
@@ -1614,7 +1614,7 @@ public class MathUtils {
 | --- | --- | --- |
 | ohos.ark_interop | 176 |  |
 | sugared version | 119 | -57 |
-| desugared: extern with eval | 166 | -10 |
+| desugared: extern with eval | 156 | -20 |
 
 
 ## Protected Members
@@ -1691,7 +1691,7 @@ public class AnimalProtect {
 >>     // Protected property
 >>     public mut prop name: String {
 >>         get() {
->>             Runtime.fromExtern<String>(Runtime.eval(MemberAccess(arkts_object, "name")))
+>>             Runtime.fromExtern<String>(MemberAccess(arkts_object, "name"))
 >>         }
 >>         set(v) {
 >>             Runtime.eval(MemberUpdate(arkts_object, "name", v))
@@ -1714,7 +1714,7 @@ public class AnimalProtect {
 | --- | --- | --- |
 | ohos.ark_interop | 146 |  |
 | sugared version | 72 | -74 |
-| desugared: extern with eval | 105 | -41 |
+| desugared: extern with eval | 100 | -46 |
 
 
 ## Generic Members
@@ -1794,7 +1794,7 @@ public class Box<T> {
 >>     // Property
 >>     public mut prop value: T {
 >>         get() {
->>             Runtime.fromExtern<T>(Runtime.eval(MemberAccess(arkts_object, "value")))
+>>             Runtime.fromExtern<T>(MemberAccess(arkts_object, "value"))
 >>         }
 >>         set(v) {
 >>             Runtime.eval(MemberUpdate(arkts_object, "value", v))
@@ -1806,7 +1806,7 @@ public class Box<T> {
 >>     * @brief getValue(): T
 >>     */
 >>     public func getValue(): T {
->>         Runtime.fromExtern<T>(Runtime.eval(FuncCall(MemberAccess(arkts_object, "getValue"), [])))
+>>         Runtime.fromExtern<T>(FuncCall(MemberAccess(arkts_object, "getValue"), []))
 >>     }
 >>
 >>     // ...
@@ -1817,7 +1817,7 @@ public class Box<T> {
 | --- | --- | --- |
 | ohos.ark_interop | 169 |  |
 | sugared version | 77 | -92 |
-| desugared: extern with eval | 115 | -54 |
+| desugared: extern with eval | 105 | -64 |
 
 
 ## Function Types
@@ -2043,8 +2043,8 @@ public class TestListener {
 >>         }
 >>         if(let Some(v) <- onError) {
 >>             Runtime.eval(MemberUpdate(obj, "onError", { callInfo: Extern<Runtime> =>
->>                 let p0 = Runtime.fromExtern<ErrorCode>(Runtime.eval(IndexedAccess(callInfo, 0)))
->>                 let p1 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 1)))
+>>                 let p0 = Runtime.fromExtern<ErrorCode>(IndexedAccess(callInfo, 0))
+>>                 let p1 = Runtime.fromExtern<String>(IndexedAccess(callInfo, 1))
 >>                 v(p0, p1)
 >>                 Runtime.undefined()
 >>             }))
@@ -2057,7 +2057,7 @@ public class TestListener {
 >>         }
 >>         if(let Some(v) <- onEvent) {
 >>             Runtime.eval(MemberUpdate(obj, "onEvent", { callInfo: Extern<Runtime> =>
->>                 let p0 = EventType.parse(Runtime.fromExtern<Int32>(Runtime.eval(IndexedAccess(callInfo, 0))))
+>>                 let p0 = EventType.parse(Runtime.fromExtern<Int32>(IndexedAccess(callInfo, 0)))
 >>                 v(p0)
 >>                 Runtime.undefined()
 >>             }))
@@ -2107,7 +2107,7 @@ public class TestListener {
 | --- | --- | --- |
 | ohos.ark_interop | 702 |  |
 | sugared version | 509 | -193 |
-| desugared: extern with eval | 685 | -17 |
+| desugared: extern with eval | 670 | -32 |
 
 
 ```cangjie
@@ -2287,7 +2287,7 @@ Notes about the above:
 >>> ```cangjie
 >>> public func greeter<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
 >>>     hmsGlobalApiCall<Runtime, Unit>( "_ark_interop_api", "greeter", [{ callInfo: Extern<Runtime> =>
->>>             let p0: String = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>             let p0: String = Runtime.fromExtern<String>(IndexedAccess(callInfo, 0))
 >>>             fn(p0)
 >>>             Runtime.undefined()
 >>>         }])
@@ -2328,7 +2328,7 @@ OR, inlining functions
 >>> public func greeter2<Runtime>(fn: (a: String) -> Unit): Unit where Runtime <: ArkTS<Runtime> {
 >>>     let jsModule = Runtime.getModule("_ark_interop_api", "hms")
 >>>     let efn: Extern<Runtime> = Runtime.toExtern({ callInfo: Extern<Runtime> =>
->>>         let p0 = Runtime.fromExtern<String>(Runtime.eval(IndexedAccess(callInfo, 0)))
+>>>         let p0 = Runtime.fromExtern<String>(IndexedAccess(callInfo, 0))
 >>>         fn(p0)
 >>>         Runtime.undefined()
 >>>     })
