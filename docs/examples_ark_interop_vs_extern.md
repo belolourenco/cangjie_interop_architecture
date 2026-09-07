@@ -2,9 +2,9 @@
 
 `ohos.ark_interop` is the existing Cangjie library for talking to the ArkTS/JS engine: applications hold a `JSContext`, wrap values as `JSValue` (and typed helpers), and call the VM through explicit APIs. The extern solution in [ArkTS Foreign Runtime](https://github.com/belolourenco/cangjie_interop_architecture/blob/main/docs/arkts_runtime_design.md) keeps that engine contract but hides it behind `Extern<ArkTS>`: the compiler desugars dynamic member access, calls, and casts onto `ArkTS <: ForeignRuntime<ArkTS>` static methods.
 
-Examples below are taken from the [cj-dts2cj translation rules](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_en/cmd-tools/cj-dts2cj-translation-rules.md) and translated by hand. Even though the ArkTS runtime is not yet fully implemented, the Extern versions still compile successfully using the definition of `ArkTS<T>` and `ArkTS1` below.
+Examples below are taken from the [cj-dts2cj translation rules](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_en/cmd-tools/cj-dts2cj-translation-rules.md) and translated by hand. Even though the ArkTS runtime is not yet fully implemented, the Extern versions still compiles successfully using the definition of `ArkTS<T>` and `ArkTS1` listed below.
 
-# The ArkTS runtime
+# The Mock ArkTS runtime
 
 The examples below assume that ArkTS is defined as below
 
