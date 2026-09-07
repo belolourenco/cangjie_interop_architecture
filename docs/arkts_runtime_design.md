@@ -889,6 +889,67 @@ payloads elsewhere in the tree.
 
 ## 9. Optimizations
 
+### Support for ExternSequence
+
+`ExternSequence` is a derived constructor that the compiler introduces when it folds two
+consecutive evaluations into one:
+
+```cangjie
+T.eval(E1)
+T.eval(E2)
+// →
+T.eval(ExternSequence(E1, E2))
+```
+
+A runtime is not required to handle it. The `case _` branches of `eval` and `evalTree`
+delegate to `ForeignRuntime<T>.evalDerived`, whose default implementation evaluates `E1`,
+discards its result, and returns `T.eval(E2)`. That is already correct, but for `ArkTS<T>`
+it re-enters `eval` twice: two `run` dispatches, two engine scopes, and a global handle for
+the result of `E1` that no Cangjie code can observe.
+
+Handling the constructor directly makes the sequence behave like any other tree — one
+dispatch, one scope, and only the final result retained:
+
+```cangjie
+public static func eval(tree: Extern<T>): Extern<T> {
+    match (tree) {
+        case ...
+        case ExternSequence(_, _) =>
+            run { retain(evalTree(tree)) }
+        case _ => ForeignRuntime<T>.evalDerived(tree)
+    }
+}
+
+private static func evalTree(tree: Extern<T>): JSValue {
+    match (tree) {
+        case ...
+        case ExternSequence(first, second) =>
+            evalTree(first)          // local handle, released when the scope closes
+            evalTree(second)
+        case _ =>
+            evalTree(ForeignRuntime<T>.evalDerived(tree))
+    }
+}
+```
+
+Operands are evaluated left to right, and an exception raised while evaluating `first`
+propagates without evaluating `second`, so the observable behaviour matches the two
+separate `eval` calls the compiler started from.
+
+For example:
+
+```cangjie
+e1.a = e2.foo()
+e1.a
+// →
+ArkTS.eval(ExternSequence(
+    ExternMemberUpdate(e1, "a", ExternFunctionCall(ExternMemberAccess(e2, "foo"), [])),
+    ExternMemberAccess(e1, "a")))
+```
+
+The update, the call, and the final read all run inside a single `run`, and only the value
+of `e1.a` is promoted to a global.
+
 ### Batched member access
 
 `evalTree` sees the whole member chain:
