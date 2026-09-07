@@ -12,13 +12,9 @@ The examples below assume that ArkTS is defined as below
 
 ```cangjie
 open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
-    public static func memberAccess(_: Extern<T>, _: String): Extern<T>     { throw ArkTSNotImplemented() }
-    public static func indexedAccess(_: Extern<T>, _: Any): Extern<T>       { throw ArkTSNotImplemented() }
-    public static func memberUpdate(_: Extern<T>, _: String, _: Any): Unit  { throw ArkTSNotImplemented() }
-    public static func indexedUpdate(_: Extern<T>, _: Any, _: Any): Unit    { throw ArkTSNotImplemented()}
-    public static func functionCall(_: Extern<T>, _: Array<Any>): Extern<T> { throw ArkTSNotImplemented() }
+    public static func eval(t: Extern<T>): Extern<T>                        { throw ArkTSNotImplemented() }
     public static func fromExtern<R>(_: Extern<T>): R                       { throw ArkTSNotImplemented() }
-    // List<Runtime> requires from Extern to Array<String>
+    // List<Runtime> requires fromExtern to Array<String>
     public static func toExtern<R>(_: R): Extern<T>                         { throw ArkTSNotImplemented() }
     // needs to translate `(Extern<T>) -> Extern<T>` into `Extern<T>`
     // List<Runtime> requires conversion Array<String> to Extern
