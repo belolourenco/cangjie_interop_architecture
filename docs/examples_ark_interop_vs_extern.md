@@ -4,6 +4,8 @@
 
 Examples below are taken from the [cj-dts2cj translation rules](https://gitcode.com/Cangjie/cangjie_docs/blob/main/docs/tools/source_en/cmd-tools/cj-dts2cj-translation-rules.md) and translated by hand. Even though the ArkTS runtime is not yet fully implemented, the Extern versions still compiles successfully using the definition of `ArkTS<T>` and `ArkTS1` listed below.
 
+Each table compares the original `ohos.ark_interop` implementation with the sugared `Extern<ArkTS>` version and its compiler-desugared form. `Number of lexical tokens` excludes whitespace and comments, and `Diff` is the token-count difference relative to the original `ohos.ark_interop` implementation.
+
 # The Mock ArkTS runtime
 
 The examples below assume that ArkTS is defined as below
