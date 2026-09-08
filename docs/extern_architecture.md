@@ -500,7 +500,7 @@ Multiple assignment of the form `(x1, ..., x3) = ...` remains consistent with th
 
 ##### Compound Assignment <span id="compound-assignment"></span>
 
-⚠️new: desugaring updated for the new rules
+⚠️new: major changes
 
 Compound assignment are not desugared in the compiler and thus need to be handled with care.
 
