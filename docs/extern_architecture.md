@@ -217,6 +217,8 @@ func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
 
 ### Position in the system <span id="position-in-the-system"></span>
 
+⚠️new: Optimizations are implemented in CHIR
+
 Compilation stages according to [cangjie_compiler/src/Frontend/CompilerInstance.cpp](https://gitcode.com/Cangjie/cangjie_compiler/blob/main/src/Frontend/CompilerInstance.cpp).
 
 This document is mostly about the boxes in red.
@@ -332,10 +334,25 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 
 ## 3. Design/Implementation Plan
 
+For the code below where `vm: Extern<T>` and `T <: ForeignRuntime`
+
+```cangjie
+let calculator = vm.calculator
+let result: Float64 = (Float64)calculator.add(2, 3.5)
+```
+
+the compiler builds a tree for the Extern typed expressions and calls `ForeignRuntime` static functions.
+
+```cangjie
+let calculator = T.eval(ExternMemberAccess(vm, "calculator"))
+let result: Float64 = T.fromExterrn<Float64>(ExternFunctionCall(ExternMemberAccess(calculator, add), [2, 3.5]))
+```
+
+In section 3.1 we introduce the changes to standard library core and in section 3.2 we introduce the changes to the compiler.
+
 ### 3.1 Standard library (`std.core`)
 
-**New file:** `stdlib/libs/std/core/extern_runtime.cj`
-
+We introduce a **new file**: `stdlib/libs/std/core/extern_runtime.cj` containing the following definitions.
 
 #### `Extern<T>` enum <span id="externt-enum"></span>
 
@@ -421,11 +438,11 @@ public class MockRT <: ForeignRuntime<MockRT> {
     public static func eval(t: Extern<MockRT>): Extern<MockRT> {
         match (t) {
             case ExternPayload(_) => t
-            case ExternMemberAccess(e, f) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
-            case ExternIndexedAccess(_, _) => /* specific implementation of ExternIndexedAccess */ throw ExternIndexedAccessException()
-            case ExternMemberUpdate(_, _, _) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
-            case ExternIndexedUpdate(_, _, _) => /* specific implementation of ExternIndexedUpdate */ throw ExternIndexedAccessException()
-            case ExternFunctionCall(_, _) => /* specific implementation of ExternFunctionCall */ throw ExternFunctionAccessException()
+            case ExternMemberAccess(e, field) => /* specific implementation of ExternMemberAccess */ throw ExternMemberAccessException()
+            case ExternIndexedAccess(e, index) => /* specific implementation of ExternIndexedAccess */ throw ExternIndexedAccessException()
+            case ExternMemberUpdate(e, field, value) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
+            case ExternIndexedUpdate(e, index, value) => /* specific implementation of ExternIndexedUpdate */ throw ExternIndexedAccessException()
+            case ExternFunctionCall(e, args) => /* specific implementation of ExternFunctionCall */ throw ExternFunctionAccessException()
             case _ => ForeignRuntime<MockRT>.evalDerived(t) // <==== Calling `evalDerived` from `ForeignRuntime<MockRT>`
         }
     }
@@ -433,6 +450,8 @@ public class MockRT <: ForeignRuntime<MockRT> {
     public static func toExtern<R>(v: R): Extern<MockRT> { throw ExternConversionException() }
 }
 ```
+
+Note how the default case (`case _ => ...`) invokes `ForeignRuntime<MockRT>.evalDerived(t)` so that new derived constructors are supported out of the box.
 
 ### 3.2 Compiler changes
 
