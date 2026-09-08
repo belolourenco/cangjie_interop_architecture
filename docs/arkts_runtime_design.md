@@ -160,10 +160,20 @@ If `run` is called on the bind thread, it executes the operation directly, as in
 below. Otherwise, it posts the operation to the JS thread and blocks the caller until the
 result is available, as in `(b)`.
 
+```mermaid
+flowchart TD
+    RUN["run(operation)"] --> MAIN{"On main thread?"}
+    MAIN -->|Yes| DIRECT["Execute operation immediately"]
+    MAIN -->|No| ENQUEUE["Enqueue operation on main thread"]
+    ENQUEUE --> WAIT["Block caller while waiting for result"]
+    DIRECT --> RESULT["Return result"]
+    WAIT --> RESULT
+```
+
 ```cangjie
 private static func run<R>(operation: () -> R): R {
     if (context.isInBindThread()) {
-        return operation()                       // (a) already on JS thread: run inline
+        return operation()                       // (a) already on JS thread: run immediately
     }
 
     // (b) other thread: hand the work to the JS thread and block for its result
@@ -204,28 +214,12 @@ Two cases:
   `Mutex`/`Condition`, then return its value or rethrow its exception. `ArkTSResult<R>` is
   the internal `Ok(R) | Err(Exception)` carrier used to move the outcome across threads.
 
-### UI-thread-bound alternative: `spawn (UIThread)`
-
-When `context` is guaranteed to have been bound on the platform UI thread, the
-`Future` returned by `spawn (UIThread)` can carry the result or exception and park the
-caller without an explicit `Mutex`/`Condition`:
-
-```cangjie
-import ohos.base.UIThread
-
-private static func run<R>(operation: () -> R): R {
-    if (context.isInBindThread()) {
-        return operation()
-    }
-
-    return (spawn (UIThread) {
-        operation()
-    }).get()
-}
-```
-
-This is not a generic replacement for `postJSTask`: `UIThread` targets the platform UI
-thread, which may differ from the bind thread of a worker or engine-owned `JSContext`.
+**Possible optimization.** The runtime could expose a configuration option asserting that
+all operations are invoked on the main thread. When enabled, `run` could execute the
+operation directly, avoiding the thread check and dispatch overhead. This option would be
+valid only when the context is bound to the main thread and the caller guarantees that all
+operations originate there. A similar approach is followed by the current `ohos.ark_interop`
+library.
 
 ---
 
@@ -709,27 +703,6 @@ private static func run<R>(operation: () -> R): R {
             case Err(error) => throw error
         }
     }
-}
-```
-
-The `spawn (UIThread)` alternative from [Thread dispatch](#3-thread-dispatch) uses the
-same scope boundary; only the off-thread dispatch changes:
-
-```cangjie
-import ohos.base.UIThread
-
-private static func run<R>(operation: () -> R): R {
-    if (context.isInBindThread()) {
-        return context.newScope {
-            operation()
-        }
-    }
-
-    return (spawn (UIThread) {
-        context.newScope {
-            operation()
-        }
-    }).get()
 }
 ```
 
