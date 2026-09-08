@@ -76,7 +76,68 @@ evaluator when it performs the update.
 
 ---
 
-## 2. Context
+## 2. `ArkTS<T>` interface
+
+`ArkTS<T>` is an abstract base class implementing `ForeignRuntime<T>`. Its public surface
+is summarized below; method bodies are omitted, and the following sections describe the
+semantics and implementation details.
+
+```cangjie
+abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
+    // Associate this runtime specialization with one JS context.
+    public static func bind(newContext: JSContext): Unit
+
+    // Evaluate an Extern expression tree.
+    public static func eval(tree: Extern<T>): Extern<T>
+
+    // Convert between Cangjie and ArkTS values.
+    public static func fromExtern<R>(value: Extern<T>): R
+    public static func toExtern<R>(value: R): Extern<T>
+
+    // Create or obtain common ArkTS values.
+    public static func undefined(): Extern<T>
+    public static func null(): Extern<T>
+    public static func object(): Extern<T>
+    public static func global(): Extern<T>
+    public static func symbol(description!: String = ""): Extern<T>
+
+    // Compare or classify ArkTS values.
+    public static func strictEqual(lhs: Extern<T>, rhs: Extern<T>): Bool
+    public static func isNull(value: Extern<T>): Bool
+    public static func isUndefined(value: Extern<T>): Bool
+
+    // Inspect or define an object's own properties.
+    public static func objectHasProperty(value: Extern<T>, key: String): Bool
+    public static func objectKeys(value: Extern<T>): Array<String>
+    public static func objectDefineOwnProperty(
+        value: Extern<T>,
+        key: String,
+        propertyValue: Any,
+        isWritable!: Bool = true,
+        isEnumerable!: Bool = true,
+        isConfigurable!: Bool = true
+    ): Bool
+
+    // Load ArkTS or system-native modules.
+    public static func requireArkModule(specifier: String): Extern<T>
+    public static func requireSystemNativeModule(moduleName: String): Extern<T>
+    public static func requireSystemNativeModule(
+        moduleName: String,
+        prefix: ?String
+    ): Extern<T>
+
+    // Batch operations inside an explicit nested engine scope.
+    public static func newScope<R>(operation: () -> R): R
+}
+```
+
+The `eval`, `fromExtern`, and `toExtern` methods form the compiler-facing
+`ForeignRuntime<T>` contract. The remaining methods are ArkTS-specific entry points used
+directly by applications and generated bindings.
+
+---
+
+## 3. Context
 
 `ArkTS<T>` is an abstract generic base class whose type parameter identifies a concrete
 ArkTS runtime.
@@ -149,7 +210,7 @@ to be visible must wait until `bind` has completed before using the runtime.
 
 ---
 
-## 3. Thread dispatch
+## 4. Thread dispatch
 
 ArkTS FFI is *bind-thread-affine*: engine calls are valid only on the thread that bound the
 context (the JS thread). Each `eval` call and public helper therefore runs its engine work
@@ -223,7 +284,7 @@ library.
 
 ---
 
-## 4. Handle model
+## 5. Handle model
 
 `Extern<T>` is the expression tree defined by the standard library:
 
@@ -281,7 +342,7 @@ evaluated `Extern` values without manually retaining them through operations suc
 
 ---
 
-## 5. Dynamic operations
+## 6. Dynamic operations
 
 The compiler represents dynamic syntax as nested `Extern<T>` nodes and calls `T.eval` once
 for the complete expression:
@@ -489,7 +550,7 @@ sequenceDiagram
 
 ---
 
-## 6. Conversions
+## 7. Conversions
 
 A Cangjie value used where
 `Extern<T>` is expected becomes `T.toExtern`, while a forced cast `(U)e` becomes
@@ -600,7 +661,7 @@ let s: String = (String)blob.name   // eval(ExternMemberAccess(...)) → fromExt
 
 ---
 
-## 7. Helpers
+## 8. Helpers
 
 These ArkTS APIs are not part of the compiler-desugared `ForeignRuntime` surface. They
 still use `run` for bind-thread safety and `retain` when returning a foreign value. Helpers
@@ -646,7 +707,7 @@ public static func requireSystemNativeModule(
 
 ---
 
-## 8. Values Lifetime
+## 9. Values Lifetime
 
 Heap-valued `JSValue`s are local handles and must be created inside an engine scope. The
 scope must remain open until an escaping result has passed through `retain`; closing it
@@ -860,7 +921,7 @@ payloads elsewhere in the tree.
 | `Imm` | engine immediate | none |
 | `Ref` | `JSHeapObject` global | `JSHeapObject` finalizer |
 
-## 9. Optimizations
+## 10. Optimizations
 
 ### Support for ExternSequence
 
