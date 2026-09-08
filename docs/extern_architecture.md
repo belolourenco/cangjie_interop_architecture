@@ -501,15 +501,90 @@ foo(..., R.toExtern<Int64>(42), ...)
 
 ⚠️new: desugaring rules changed
 
-Let `e: Extern<T>`. Then:
+The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the resulting tree.
 
-| Surface syntax | Is desugared into |
-| --- | --- |
-| `e.f` | `T.eval(ExternMemberAccess(e, "f"))` |
-| `e.f = v` | `T.eval(ExternMemberUpdate(e, "f", v))` |
-| `e[i]` | `T.eval(ExternIndexedAccess(e, i))` |
-| `e[i] = v` | `T.eval(ExternIndexedUpdate(e, i, v))` |
-| `e(a, b, ...)` | `T.eval(ExternFunctionCall(e, [a, b, ...]))` |
+```text
+DESUGAR(exp) = T.eval(BUILD_TREE(exp))    // if exp has type Extern<T>
+DESUGAR(exp) = exp                            // otherwise
+```
+
+For `BUILD_TREE`, the following cases apply when the receiver `e1` has type `Extern<T>`:
+
+```text
+BUILD_TREE(e1.f)            = ExternMemberAccess(BUILD_TREE(e1), "f")
+BUILD_TREE(e1.f = e2)       = ExternMemberUpdate(BUILD_TREE(e1), "f", BUILD_TREE(e2))
+BUILD_TREE(e1[i])           = ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i))
+BUILD_TREE(e1[i] = e2)      = ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2))
+BUILD_TREE(e1(e2, e3, ...)) = ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...])
+BUILD_TREE(exp)             = exp
+```
+
+BUILD_TREE recursively transforms nested dynamic Extern expressions, leaving other expressions unchanged. Neither DESUGAR nor BUILD_TREE traverses non-Extern expressions.
+
+Example 1:
+
+For `e1: Extern<T>`.
+
+```cangjie
+DESUGAR(e1.x.y) = T.eval(ExternMemberAccess(ExternMemberAccess(e1, "x"), "y"))
+```
+
+Example 2:
+
+For `e1, e2: Extern<T>`.
+
+```cangjie
+DESUGAR(e1.x.y = e2.z) =
+    T.eval( ExternMemberUpdate(
+                ExternMemberAccess(e1, "x"),
+                "y",
+                ExternMemberAccess(e2, "z")
+            )
+    )
+```
+
+Example 3:
+
+For `e1, e2: Extern<T>`.
+
+```cangjie
+DESUGAR(e1e.items[ke2ey.value]) =
+    T.eval( ExternIndexedAccess(
+                ExternMemberAccess(e1, "items"),
+                ExternMemberAccess(e2, "value")
+            )
+    )
+```
+
+Example 4:
+
+For `e1, e2, e3: Extern<T>`.
+
+```cangjie
+DESUGAR(e1.items[e2.value] = e3.result) =
+    T.eval( ExternIndexedUpdate(
+                ExternMemberAccess(e1, "items"),
+                ExternMemberAccess(e2, "value"),
+                ExternMemberAccess(e3, "result")
+            )
+    )
+```
+
+Example 5:
+
+For `e1, e2, e3: Extern<T>`, `n: Int64`.
+
+```cangjie
+DESUGAR(e1.api.run(e2.value, e3[0], n + 1)) =
+    T.eval( ExternFunctionCall(
+                ExternMemberAccess(ExternMemberAccess(e1, "api"), "run"),
+                [ ExternMemberAccess(e2, "value"), 
+                  ExternIndexedAccess(e3, 0),
+                  n + 1
+                ]
+            )
+    )
+```
 
 #### Clarifications on assignment
 
