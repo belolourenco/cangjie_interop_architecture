@@ -517,71 +517,27 @@ x += e2
 is desugared into
 
 ```cangjie
-let tmp1 = T.eval(ExternMemberAccess(x, "+"))
-x = T.eval(ExternFunctionCall(tmp1, [e2]))
-```
-
-TODO: is the following correct as an alternative for the above?
-```cangjie
 x = T.eval(ExternFunctionCall(ExternMemberAccess(x, "+"), [e2]))
 ```
 
 
 ###### Case 2
 
-Let `e1: Extern<T>` and `e2: Extern<T>`, then:
+The following is **not** allowed when `e1: Extern<T>`.
 
 ```cangjie
-e1.foo += e2
-```
-
-is desugared into
-
-```cangjie
-let tmp1 = e1
-let tmp2 = T.eval(ExternMemberAccess(T.eval(ExternMemberAccess(tmp1, "foo")), "+"))
-T.eval(ExternMemberUpdate(tmp1, "foo", T.eval(ExternFunctionCall(tmp2, [e2]))))
-```
-
-TODO: is the following correct as an alternative for the above?
-```cangjie
-let tmp1 = e1
-T.eval(ExternMemberUpdate(tmp1, "foo", ExternFunctionCall(ExternMemberAccess(ExternMemberAccess(tmp1, "foo"), "+"), [e2])))
+e1.foo += exp
 ```
 
 ###### Case 3
 
-Let `e1: Extern<T>`, `e2: Extern<T>`, and `idx: Any`, then:
+The following is **not** allowed when `e1: Extern<T>`.
 
 ```cangjie
-e1[idx] += e2
+e1[idx] += exp
 ```
 
-is desugared into
-
-
-```cangjie
-let tmp1 = e1
-let tmp2 = idx
-let tmp3 = T.eval(ExternIndexedAccess(tmp1, tmp2))
-let tmp4 = T.eval(ExternMemberAccess(tmp3, "+"))
-T.eval(ExternIndexedUpdate(tmp1, tmp2, T.eval(ExternFunctionCall(tmp4, [e2]))))
-```
-
-TODO: is the following correct as an alternative for the above?
-```cangjie
-let tmp1 = e1
-let tmp2 = idx
-T.eval(ExternIndexedUpdate(tmp1, tmp2, ExternFunctionCall(ExternMemberAccess(ExternIndexedAccess(tmp1, tmp2), "+"), [e2])))
-```
-
-**Multiple instances of same language:**
-
-```cangjie
-public open class PythonRT<T> <: ForeignRuntime<T> where T <: PythonRT<T> { ... }
-public class PythonRT1 <: PythonRT<PythonRT1> {}
-public class PythonRT2 <: PythonRT<PythonRT2> {}
-```
+**Optionally** we can add an enum constructor of the form `| ExternCompoundAssignment(Extern<T>, String, Any)` and desugar case 1 as `T.eval(ExternCompoundAssignment(ExternMemberAccess(e1, "foo"), "+", exp))` and case 2 as `T.eval(ExternCompoundAssignment(ExternIndexedAccess(e1, idx), "+", exp))`. Note that such a constructor needs to be primitive as it cannot be derived from the other constructors.
 
 #### Runtime implementer possible optimizations
 
