@@ -535,7 +535,7 @@ e1[idx] += exp
 
 Reason: we cannot express the operator with the current Extern constructors without imposing an evaluation order or without evaluating `e1` twice`.
 
-**Optionally** we can add an enum constructor of the form `| ExternCompoundAssignment(Extern<T>, String, Any)` and desugar case 1 as `T.eval(ExternCompoundAssignment(ExternMemberAccess(e1, "foo"), "+", exp))` and case 2 as `T.eval(ExternCompoundAssignment(ExternIndexedAccess(e1, idx), "+", exp))`. Note that such a constructor needs to be primitive as it cannot be derived from the other constructors.
+**Optionally** we can add an enum constructor of the form `| ExternCompoundAssignment(Extern<T>, String, Any)` and desugar case 2 as `T.eval(ExternCompoundAssignment(ExternMemberAccess(e1, "foo"), "+", exp))` and case 3 as `T.eval(ExternCompoundAssignment(ExternIndexedAccess(e1, idx), "+", exp))`. Note that such a constructor needs to be primitive as it cannot be derived from the other constructors.
 
 #### Runtime implementer possible optimizations
 
