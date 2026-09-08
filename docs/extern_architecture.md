@@ -501,14 +501,14 @@ foo(..., R.toExtern<Int64>(42), ...)
 
 ⚠️new: desugaring rules changed
 
-The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the resulting tree.
+The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the result.
 
 ```text
-DESUGAR(exp) = T.eval(BUILD_TREE(exp))    // if exp has type Extern<T>
-DESUGAR(exp) = exp                            // otherwise
+DESUGAR(exp) = T.eval(BUILD_TREE(exp))    // if exp has type Extern<T>, build tree and call eval
+DESUGAR(exp) = MAP(DESUGAR, exp)          // otherwise, desugar sub expressions
 ```
 
-For `BUILD_TREE`, the following cases apply when the receiver `e1` has type `Extern<T>`:
+For `BUILD_TREE`, the following cases apply when `e1` has type `Extern<T>`:
 
 ```text
 BUILD_TREE(e1.f)            = ExternMemberAccess(BUILD_TREE(e1), "f")
@@ -516,10 +516,10 @@ BUILD_TREE(e1.f = e2)       = ExternMemberUpdate(BUILD_TREE(e1), "f", BUILD_TREE
 BUILD_TREE(e1[i])           = ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i))
 BUILD_TREE(e1[i] = e2)      = ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2))
 BUILD_TREE(e1(e2, e3, ...)) = ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...])
-BUILD_TREE(exp)             = exp
+BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, desugar subexpressions
 ```
 
-BUILD_TREE recursively transforms nested dynamic Extern expressions, leaving other expressions unchanged. Neither DESUGAR nor BUILD_TREE traverses non-Extern expressions.
+`BUILD_TREE` builds dynamic `Extern` trees. Otherwise, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its  subexpressions.
 
 Example 1:
 
@@ -548,7 +548,7 @@ Example 3:
 For `e1, e2: Extern<T>`.
 
 ```cangjie
-DESUGAR(e1e.items[ke2ey.value]) =
+DESUGAR(e1.items[e2.value]) =
     T.eval( ExternIndexedAccess(
                 ExternMemberAccess(e1, "items"),
                 ExternMemberAccess(e2, "value")
