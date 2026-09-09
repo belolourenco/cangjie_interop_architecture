@@ -1084,6 +1084,21 @@ reuse it and avoid another string conversion. The resolved value of `a.foo` is n
 cached: every access still performs normal ArkTS property lookup, preserving reassignment,
 getters, proxy traps, and exceptions.
 
+Examples that repeatedly use the same property key:
+
+```cangjie
+for (item in items) {
+    total += (Float64)item.price
+}
+
+for (view in views) {
+    view.render()
+}
+```
+
+The ArkTS keys for `"price"` and `"render"` are created once and reused on every
+iteration, even though each property lookup still happens normally.
+
 ### Caching immutable objects
 
 Conversions may cache immutable values that have different Cangjie and ArkTS
@@ -1111,6 +1126,14 @@ The cache is per concrete `ArkTS<T>` specialization because retained handles bel
 its bound context. It should be weak or bounded so cached globals do not live forever.
 This is safe only for immutable values; mutable objects still require normal conversion
 or an explicit invalidation policy.
+
+Example with repeated conversion of the same immutable value:
+
+```cangjie
+for (event in events) {
+    logger.tag("network").write(event) // reuse the ArkTS representation of "network"
+}
+```
 
 ### Not part of the current proposal, but possible: Send the entire `Extern` tree at once
 
