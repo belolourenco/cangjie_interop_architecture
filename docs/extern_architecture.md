@@ -505,7 +505,7 @@ The desugaring of Extern expressions is performed according to the `DESUGAR` fun
 
 ```text
 DESUGAR(exp) = T.eval(BUILD_TREE(exp))    // if exp has type Extern<T>, build tree and call eval
-DESUGAR(exp) = MAP(DESUGAR, exp)          // otherwise, desugar sub expressions
+DESUGAR(exp) = MAP(DESUGAR, exp)          // otherwise, for non-Extern expressions desugar sub expressions
 ```
 
 For `BUILD_TREE`, the following cases apply when `e1` has type `Extern<T>`:
