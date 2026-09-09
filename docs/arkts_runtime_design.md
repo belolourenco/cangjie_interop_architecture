@@ -1084,7 +1084,33 @@ reuse it and avoid another string conversion. The resolved value of `a.foo` is n
 cached: every access still performs normal ArkTS property lookup, preserving reassignment,
 getters, proxy traps, and exceptions.
 
+### Caching immutable objects
 
+Conversions may cache immutable values that have different Cangjie and ArkTS
+representations. Strings are the primary case: the first conversion records both the
+Cangjie `String` and a retained ArkTS string; later conversions in either direction reuse
+that pair instead of copying the string again.
+
+```cangjie
+private static let strings = ImmutableCache<String, JSHeapObject>()
+
+private static func stringToJS(text: String): JSValue {
+    strings.foreignFor(text).getOrInsert({ => context.string(text) }).toJSValue()
+}
+
+private static func stringFromJS(value: JSValue): String {
+    strings.cangjieFor(value).getOrInsert({ => value.toString() })
+}
+
+// Used by the String branches of toJSValue and fromExtern.
+case text: String          => stringToJS(text)
+case _: Option<String>     => (stringFromJS(value) as R).getOrThrow()
+```
+
+The cache is per concrete `ArkTS<T>` specialization because retained handles belong to
+its bound context. It should be weak or bounded so cached globals do not live forever.
+This is safe only for immutable values; mutable objects still require normal conversion
+or an explicit invalidation policy.
 
 ### Not part of the current proposal, but possible: Send the entire `Extern` tree at once
 
