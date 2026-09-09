@@ -516,10 +516,12 @@ BUILD_TREE(e1.f = e2)       = ExternMemberUpdate(BUILD_TREE(e1), "f", BUILD_TREE
 BUILD_TREE(e1[i])           = ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i))
 BUILD_TREE(e1[i] = e2)      = ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2))
 BUILD_TREE(e1(e2, e3, ...)) = ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...])
-BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, desugar subexpressions
+BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, for non-Extern expressions desugar subexpressions
 ```
 
 `BUILD_TREE` builds dynamic `Extern` trees. Otherwise, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its  subexpressions.
+
+**IMPORTANT**: For `Extern` expressions, evaluation order is runtime-defined; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order is preserved. The specification must account for this distinction.
 
 Example 1:
 
