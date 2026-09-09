@@ -4,7 +4,7 @@ This document specifies a generic `ArkTS<T>` foreign-runtime abstraction for acc
 ArkTS/JS values from Cangjie.
 
 **Background.** `Extern<T>` represents either an evaluated value in a *foreign memory
-space* or a deferred operation on such a value. It is a recursive enum whose leaf is
+space* or a deferred operation on a foreign runtime. It is a recursive enum whose leaf is
 `ExternPayload(Any)` and whose other variants describe member access, indexed access, updates,
 and calls. The compiler builds these trees from dynamic syntax and passes them to
 `T.eval`. The type parameter `T` implements `ForeignRuntime<T>`; `ArkTS<T>` supplies the
@@ -13,21 +13,18 @@ ArkTS implementation for concrete, self-typed runtime classes.
 Version 1 uses `ohos.ark_interop` as its backend. A later version will replace that backend
 with direct Cangjie FFI bindings to OpenHarmony’s native `ARKTS_*` interface.
 
----
-
 ## 1. Layering
 
 User-facing dynamic syntax on `Extern<T>` never calls the VM directly. The compiler builds
 an `Extern<T>` expression tree and passes it to `T.eval`. `ArkTS<T>` evaluates the complete
 tree through the thread-safe `run` wrapper and stores evaluated values as an internal
 `ArkTSHandle` inside `ExternPayload`. This version goes through `ohos.ark_interop`; later versions
-may call the `ARKTS_*` FFI directly.
+will call the `ARKTS_*` FFI functions directly.
 
 ```mermaid
 flowchart TB
-    UC["User: e.f / e(...) / e[i]"] --> DS["cjc builds Extern tree"]
-    DS --> EVAL["T.eval(tree)"]
-    EVAL --> ARK["ArkTS&lt;T&gt; <: ForeignRuntime&lt;T&gt;"]
+    UC["User:<br/><br/> e.f / e(...) / e[i]"] --> DS["cjc<br/><br/> build Extern **tree**<br/>ArkTS.eval(**tree**)"]
+    DS --> ARK["ArkTS&lt;T&gt; <: ForeignRuntime&lt;T&gt;"]
     ARK -->|"v1"| CTX["ohos.ark_interop"] --> FFI["ARKTS_*"] --> VM["ArkTS VM"]
     ARK -.->|"v2"| FFI
 ```
@@ -62,8 +59,6 @@ let a: Float64 = ArkTS.fromExtern<Float64>(
 
 The assigned `3.0` remains an `Any` operand in the tree and is converted by the ArkTS
 evaluator when it performs the update.
-
----
 
 ## 2. `ArkTS<T>` interface
 
@@ -120,7 +115,13 @@ The `eval`, `fromExtern`, and `toExtern` methods form the compiler-facing
 `ForeignRuntime<T>` contract. The remaining methods are ArkTS-specific entry points used
 directly by applications and generated bindings.
 
----
+
+Concrete runtime specializations subclass `ArkTS<T>`:
+
+```cangjie
+class ArkTS1 <: ArkTS<ArkTS1> {}
+class ArkTS2 <: ArkTS<ArkTS2> {}
+```
 
 ## 3. Context
 
@@ -169,13 +170,6 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
 }
 ```
 
-Concrete runtime specializations subclass `ArkTS<T>`:
-
-```cangjie
-internal class ArkTS1 <: ArkTS<ArkTS1> {}
-internal class ArkTS2 <: ArkTS<ArkTS2> {}
-```
-
 Each specialization can then be bound to its own context:
 
 ```cangjie
@@ -193,8 +187,6 @@ makes the initial check-and-install atomic, ensuring that exactly one concurrent
 observe `None` and throw `ArkTSContextNotBoundException`; a caller that requires the bind
 to be visible must wait until `bind` has completed before using the runtime.
 
----
-
 ## 4. Thread dispatch
 
 ArkTS FFI is *bind-thread-affine*: engine calls are valid only on the thread that bound the
@@ -202,9 +194,8 @@ context (the JS thread). Each `eval` call and public helper therefore runs its e
 inside `run`, which looks synchronous to the caller regardless of which Cangjie thread
 called it. Recursive evaluation stays inside that single `run` invocation.
 
-If `run` is called on the bind thread, it executes the operation directly, as in `(a)`
-below. Otherwise, it posts the operation to the JS thread and blocks the caller until the
-result is available, as in `(b)`.
+If `run` is called on the bind thread, it executes the operation directly, otherwise it posts the operation to the JS thread and blocks the caller until the
+result is available.
 
 ```mermaid
 flowchart TD
@@ -267,8 +258,6 @@ valid only when the context is bound to the main thread and the caller guarantee
 operations originate there. A similar approach is followed by the current `ohos.ark_interop`
 library.
 
----
-
 ## 5. Handle model
 
 `Extern<T>` is the expression tree defined by the standard library:
@@ -327,8 +316,6 @@ or helper call. Intermediate values remain local to the evaluation. This lets us
 evaluated `Extern` values without manually retaining them through operations such as
 `value.asObject()`.
 
----
-
 ## 6. Dynamic operations
 
 The compiler represents dynamic syntax as nested `Extern<T>` nodes and calls `T.eval` once
@@ -368,7 +355,7 @@ a.b(42).c = d.e().f() → T.eval(
 )
 ```
 
-Constructing the tree performs no engine work. For a primitive operation, `eval` enters
+For a primitive operation, `eval` enters
 `run` once, evaluates the operation to a `JSValue`, and retains its result. `evalTree`
 performs the same operations recursively, so top-level and nested primitive operations
 have identical semantics while only the top-level result is retained. An existing `ExternPayload` is already
@@ -435,15 +422,13 @@ private static func evalIndexedUpdate(target: Extern<T>, index: Any, value: Any)
 
 When a derived constructor is nested inside a primitive tree, `evalTree` delegates that
 subtree to `evalDerived` and projects the evaluated `Extern<T>` result back to a local
-`JSValue`. Any `T.eval` calls made by `evalDerived` use the normal ArkTS dispatch and scope
-policy; for a nested derived constructor, dispatch already runs on the bind thread.
+`JSValue`.
 
 ### Indexed access
 
 Index operations accept an integer position, a `String` property name, or an `Extern<T>`
 from the same runtime. The `Extern<T>` is a tree node like any other, so it may be an
-unevaluated expression; `toJSKeyable` reduces it with `evalTree`, inside the same scope as
-the surrounding evaluation, and maps the result onto one of the `JSKeyable` types accepted
+unevaluated expression; `toJSKeyable` reduces it with `evalTree`, and maps the result onto one of the `JSKeyable` types accepted
 by `getProperty` and `setProperty`: a string becomes a `JSString`, a symbol a `JSSymbol`,
 and a number a `Float64`. `writeIndex` resolves this key before converting the assigned
 value, preserving target–index–value evaluation order.
@@ -535,8 +520,6 @@ sequenceDiagram
     A-->>U: retain(result)
 ```
 
----
-
 ## 7. Conversions
 
 A Cangjie value used where
@@ -563,10 +546,10 @@ private static func toJSValue(value: Any): JSValue {
             }).toJSValue()
         case boolean: Bool    => context.boolean(boolean).toJSValue()
         case number: Int32    => context.number(number).toJSValue()
-        case number: Int64    => context.number(Float64(number)).toJSValue()
         case number: Float64  => context.number(number).toJSValue()
-        case text: String     => context.string(text).toJSValue()
+        case number: Int64    => context.bigint(number).toJSValue()
         case number: BigInt   => context.bigint(number).toJSValue()
+        case text: String     => context.string(text).toJSValue()
         case items: Array<Int64>      => arrayJSValue(items)
         case items: Array<Float64>    => arrayJSValue(items)
         case items: Array<Bool>       => arrayJSValue(items)
@@ -580,14 +563,12 @@ private static func toJSValue(value: Any): JSValue {
 Notes:
 
 - An `Extern<T>` from the same concrete runtime goes through `evalTree`: an evaluated
-  payload is projected without a copy, and an unevaluated node is evaluated first, in the
-  scope of the surrounding evaluation. An `Extern` belonging to another ArkTS
-  specialization does not match this branch.
+  payload is projected without a copy, and an unevaluated node is evaluated first.
+  An `Extern` belonging to another ArkTS specialization does not match this branch.
 - A Cangjie callback of type `(Extern<T>) -> Extern<T>` becomes a JS function. On
   invocation, all JS arguments are collected into one array and passed to the callback as
-  an evaluated `Extern<T>`. Its result goes through `toJSValue`, so the callback may return
-  either a payload or an unevaluated node.
-- `Int64` is widened to `Float64` because JS numbers are doubles.
+  an evaluated `Extern<T>`.
+- `Int64` becomes a big int.
 - Supported arrays are arrays of `Int64`, `Float64`, `Bool`,
   `String`, or same-runtime `Extern<T>`. `arrayJSValue<E>` maps each element through
   `toJSValue`; other array types are rejected for now.
@@ -614,7 +595,6 @@ public static func fromExtern<R>(e: Extern<T>): R {
         match (None<R>) {    // dummy `None<R>` to match the type parameter
             case _: Option<Bool>    => (value.toBoolean() as R).getOrThrow()
             case _: Option<Int32>   => (Int32(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int32
-            case _: Option<Int64>   => (Int64(value.toNumber()) as R).getOrThrow()   // read JS number, narrow to Int64
             case _: Option<Float64> => (value.toNumber() as R).getOrThrow()
             case _: Option<String>  => (value.toString() as R).getOrThrow()
             case _: Option<BigInt>  => (value.toBigInt() as R).getOrThrow()
@@ -637,8 +617,6 @@ For `Bool`, `String`, `BigInt`, and `Float64`, the matching reader is called dir
 `Int32` and `Int64` read a JS number and narrow it. Converting to `Unit` discards the value;
 converting to `Array<String>` converts each element; and conversion to the same `Extern<T>`
 is the identity case. Other target types are rejected.
-
----
 
 ## 8. Helpers
 
@@ -678,8 +656,6 @@ public static func requireSystemNativeModule(
     run { retain(context.requireSystemNativeModule(moduleName, prefix: prefix)) }
 }
 ```
-
----
 
 ## 9. Optimizations
 
@@ -727,7 +703,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
 ```
 
 Operands are evaluated left to right, and an exception raised while evaluating `first`
-propagates without evaluating `second`, so the observable behaviour matches the two
+propagates without evaluating `second`, so the observable behavior matches the two
 separate `eval` calls the compiler started from.
 
 For example:
@@ -761,35 +737,6 @@ ExternMemberAccess(
 It can flatten adjacent `ExternMemberAccess` nodes and evaluate them as one path. Walking from
 the outer node produces `d, c, b`, so the helper reverses the fields before returning:
 
-```cangjie
-private static func flattenMemberPath(
-    tree: Extern<T>
-): (Extern<T>, Array<String>) {
-    let fields = ArrayList<String>()
-    var root = tree
-
-    while (true) {
-        match (root) {
-            case ExternMemberAccess(target, field) =>
-                fields.add(field)
-                root = target
-            case _ =>
-                fields.reverse()
-                return (root, fields.toArray())
-        }
-    }
-}
-
-private static func evalTree(tree: Extern<T>): JSValue {
-    match (tree) {
-        case ExternMemberAccess(_, _) =>
-            let (root, fields) = flattenMemberPath(tree)
-            getPropertyPath(evalTree(root), fields)
-        case ...
-    }
-}
-```
-
 This replaces:
 
 ```cangjie
@@ -802,7 +749,7 @@ with:
 getPropertyPath(a, ["b", "c", "d"])
 ```
 
-This needs a future path-based FFI such as `ARKTS_GetPropertyPath`; the current
+**Important**: This needs a future path-based FFI such as `ARKTS_GetPropertyPath`; the current
 `ARKTS_GetProperty` still requires one call per field. The path operation must preserve
 normal property-read order, getters, proxy traps, and exceptions. Calls, updates, and
 indexed accesses stop the batch.
@@ -818,20 +765,12 @@ a.b.c = value
 a.getProperty("b").setProperty("c", toJSValue(value))
 
 // Future
-setPropertyPath(a, ["b", "c"], value)
+setPropertyPath(a, ["b", "c"], toJSValue(value))
 ```
 
-`evalTree` can reuse `flattenMemberPath` by adding the updated field to the chain:
-
-```cangjie
-case ExternMemberUpdate(target, field, value) =>
-    let update = ExternMemberAccess(target, field)
-    let (root, fields) = flattenMemberPath(update)
-    setPropertyPath(evalTree(root), fields, value)
-```
-
-A future `ARKTS_SetPropertyPath` must read every field except the last, convert `value`,
-and then update the last field, preserving the existing evaluation and exception order.
+**Important**: This needs a future path-based FFI such as `ARKTS_SetPropertyPath` which
+must read every field except the last and then update the last field, preserving the
+existing evaluation and exception order.
 
 ### Name resolution caching
 
