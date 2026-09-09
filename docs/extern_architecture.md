@@ -588,7 +588,7 @@ DESUGAR(e1.api.run(e2.value, e3[0], n + 1)) =
     )
 ```
 
-#### Clarifications on assignment
+#### Other forms of assignment
 
 ##### Multiple Assignment Expression <span id="multiple-assignment-expression"></span>
 
@@ -631,15 +631,19 @@ e1[idx] += exp
 
 Reason: we cannot express the operator with the current Extern constructors without imposing an evaluation order or without evaluating `e1` twice.
 
+Note that this does not mean that a specific foreign runtime implementation cannot handle it, it simply means that we don't have a concise syntax for it. A foreign runtime can still provide a function of the form `MockRT.compoundAssignment(e1[idx], "+", exp)` and implement the operation as desired.
+
 **Optionally** we can add an enum constructor of the form `| ExternCompoundAssignment(Extern<T>, String, Any)` and desugar case 2 as `T.eval(ExternCompoundAssignment(ExternMemberAccess(e1, "foo"), "+", exp))` and case 3 as `T.eval(ExternCompoundAssignment(ExternIndexedAccess(e1, idx), "+", exp))`. Note that such a constructor needs to be primitive as it cannot be derived from the other constructors.
 
-#### Runtime implementer possible optimizations
+## 4. Optimizations
+
+### 4.1. Runtime implementer possible optimizations
 
 ⚠️new: new section
 
 Because `eval` / `fromExtern` receive an `Extern` *tree* (nested operands are not pre-evaluated), the runtime can specialize common shapes.
 
-##### Possible optimization 1: path access
+#### Possible optimization 1: path access
 
 ```cangjie
 e.a.b.c
@@ -648,7 +652,7 @@ e.a.b.c
 
 A naive `eval` costs one FFI call and one intermediate handle per member access (3 of each here). The runtime can instead resolve the whole path `["a", "b", "c"]` on `e` in a single call, with no intermediate `Extern` / global handles.
 
-##### Possible optimization 2: short lifetime for intermediate values
+#### Possible optimization 2: short lifetime for intermediate values
 
 ```cangjie
 e.a.b(c.d, f[0]).g
@@ -661,7 +665,7 @@ e.a.b(c.d, f[0]).g
 
 A naive `eval` promotes every nested access, call, and argument to a global handle (6 here). Only the result of the whole expression is visible to Cangjie, so the intermediates can stay local and be released when `eval` returns.
 
-##### Possible optimization 3: intern field names
+#### Possible optimization 3: intern field names
 
 ```cangjie
 e.foo
@@ -672,7 +676,7 @@ e.foo
 
 A naive `eval` converts the Cangjie string `"foo"` into a foreign string on every access. Interning it as a reusable foreign string removes that conversion from all later accesses of the same field name.
 
-##### Possible optimization 4: cache converted strings
+#### Possible optimization 4: cache converted strings
 
 ```cangjie
 let e1: Extern<T> = "foo"
@@ -683,7 +687,7 @@ let e2: Extern<T> = "foo"
 
 A naive `toExtern` allocates and converts the same Cangjie string twice. Caching the foreign string keyed by the Cangjie value turns the second conversion into a lookup; the dual is `fromExtern<String>(e)` on the same immutable foreign string.
 
-##### Possible optimization 5: bulk conversion of aggregates
+#### Possible optimization 5: bulk conversion of aggregates
 
 ```cangjie
 let a: Extern<T> = [1, 2, 3]
@@ -692,7 +696,7 @@ let a: Extern<T> = [1, 2, 3]
 
 A naive `toExtern` builds the foreign array one element at a time. Copying the buffer in one go costs a single FFI call for the whole array; the dual is `(Array<Int64>)a` in `fromExtern`.
 
-##### Possible optimization 6: send the whole tree in one FFI call
+#### Possible optimization 6: send the whole tree in one FFI call
 
 ```cangjie
 e.a.b(c.d, f[0]).g
@@ -706,13 +710,13 @@ e.a.b(c.d, f[0]).g
 A naive `eval` crosses the FFI boundary once per constructor (6 times here), and optimization 1 fuses only pure member paths. Encoding the tree and evaluating it on the C / VM side handles a mixed member / index / call expression in a single crossing.
 
 
-#### Compiler Optimizations
+### 4.2. Compiler Optimizations
 
 ⚠️new: new section
 
 The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose two optimizations.
 
-##### Optimization 1
+#### Optimization 1
 
 `T.fromExtern<R>(T.eval(E))` can be optimized as `T.fromExtern<R>(E)`, avoiding the creation of an Extern value.
 
@@ -734,7 +738,7 @@ let name = T.fromExtern<String>(ExternMemberAccess(person, name))
 
 This optimization can be implemented immediately when desugaring or in CHIR.
 
-##### Optimization 2 <span id="optimization-2"></span>
+#### Optimization 2 <span id="optimization-2"></span>
 
 ```cangjie
 T.eval(E1)
@@ -819,7 +823,7 @@ T.eval(ExternSequence(ExternMemberUpdate(e1, "a", ExternMemberAccess(e2, "foo"))
       )
 ```
 
-## 4. Summary of Key DT Test Cases
+## 5. Summary of Key DT Test Cases
 
 For some valid implementation `class MockRT <: ForeignRuntime<MockRT> { ... }` the following is expected.
 
@@ -844,7 +848,7 @@ Test suite location: `cangjie_test/testsuites/LLT/Runtime/CJNative/extern/`
 
 ---
 
-## 5. Conclusion
+## 6. Conclusion
 
 The `Extern<T>` feature introduces a language-level interoperability mechanism that:
 
