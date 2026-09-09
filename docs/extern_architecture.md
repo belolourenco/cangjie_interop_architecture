@@ -521,7 +521,7 @@ BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, for non-Extern 
 
 `BUILD_TREE` builds dynamic `Extern` trees. Otherwise, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its  subexpressions.
 
-**IMPORTANT**: For `Extern` expressions, evaluation order is runtime-defined; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order is preserved. The specification must account for this distinction.
+**IMPORTANT**: For `Extern` expressions, evaluation order is defined by the foreign-runtime implementation; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order is preserved. The specification must account for this distinction.
 
 Example 1:
 
