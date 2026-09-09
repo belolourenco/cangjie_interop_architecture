@@ -707,9 +707,7 @@ a.getProperty("b").setProperty("c", toJSValue(value))
 setPropertyPath(a, ["b", "c"], toJSValue(value))
 ```
 
-**Important**: This needs a future path-based FFI such as `ARKTS_SetPropertyPath` which
-must read every field except the last and then update the last field, preserving the
-existing evaluation and exception order.
+**Important**: This needs a future path-based FFI such as `ARKTS_SetPropertyPath`.
 
 ### Support for ExternSequence
 
@@ -769,9 +767,57 @@ ArkTS.eval(ExternSequence(
     ExternFunctionCall(e2, [])))
 ```
 
-The two dynamic calls run inside a single `run`, and only the value
-of `e2()` is promoted to a global.
+Both calls run inside one `run`; only the second result is retained.
 
+`evalTree` can also batch adjacent updates to the same object:
+
+```cangjie
+e1.a = ea
+e1.b = eb
+// →
+ArkTS.eval(ExternSequence(
+    ExternMemberUpdate(e1, "a", ea),
+    ExternMemberUpdate(e1, "b", eb)))
+```
+
+Put the batch before the general `ExternSequence` case:
+
+```cangjie
+private static func evalTree(tree: Extern<T>): JSValue {
+    match (tree) {
+        ...
+        case ExternSequence(first, second) =>
+            match ((first, second)) {
+                case (ExternMemberUpdate(target1, field1, value1),
+                      ExternMemberUpdate(target2, field2, value2)) =>
+                    let receiver1 = evalTree(target1)
+                    let receiver2 = evalTree(target2)
+                    if (receiver1.strictEqual(receiver2)) {
+                        ARKTS_SetProperties(
+                            receiver1,
+                            [field1, field2],
+                            [toJSValue(value1), toJSValue(value2)]) // one FFI operation
+                        context.undefined().toJSValue()
+                    } else {
+                        receiver1.setProperty(field1, toJSValue(value1))
+                        receiver2.setProperty(field2, toJSValue(value2))
+                        context.undefined().toJSValue()
+                    }
+                case _ =>
+                    evalTree(first)
+                    evalTree(second)
+            }
+        case _ =>
+            evalTree(ForeignRuntime<T>.evalDerived(tree))
+    }
+}
+```
+
+Each target is evaluated once. Equal receivers use `ARKTS_SetProperties`; distinct
+receivers are reused for two ordinary updates.
+
+
+**Important**: This needs a future path-based FFI such as `ARKTS_SetProperties`.
 
 ### Name resolution caching
 
