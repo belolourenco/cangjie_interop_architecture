@@ -13,9 +13,6 @@ ArkTS implementation for concrete, self-typed runtime classes.
 Version 1 uses `ohos.ark_interop` as its backend. A later version will replace that backend
 with direct Cangjie FFI bindings to OpenHarmony’s native `ARKTS_*` interface.
 
-A prototype of this design is available
-[TODO]().
-
 ---
 
 ## 1. Layering
@@ -25,14 +22,6 @@ an `Extern<T>` expression tree and passes it to `T.eval`. `ArkTS<T>` evaluates t
 tree through the thread-safe `run` wrapper and stores evaluated values as an internal
 `ArkTSHandle` inside `ExternPayload`. This version goes through `ohos.ark_interop`; later versions
 may call the `ARKTS_*` FFI directly.
-
-```cangjie
-public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
-    static func eval(tree: Extern<T>): Extern<T>
-    static func fromExtern<R>(value: Extern<T>): R
-    static func toExtern<R>(value: R): Extern<T>
-}
-```
 
 ```mermaid
 flowchart TB
@@ -667,6 +656,17 @@ These ArkTS APIs are not part of the compiler-desugared `ForeignRuntime` surface
 still use `run` for bind-thread safety and `retain` when returning a foreign value. Helpers
 that consume an `Extern<T>` use `evalTree`, so callers may pass either a payload or a tree.
 
+| API | Role |
+| --- | --- |
+| `undefined()` / `null()` / `object()` / `symbol(...)` | Construct a JS value, then `retain` it. |
+| `global()` | Return the context's global object through `retain`. |
+| `strictEqual(a, b)` | Evaluate both operands and apply JS `===`. |
+| `isNull` / `isUndefined` | Evaluate the operand and test the resulting `JSValue`. |
+| `objectHasProperty` / `objectKeys` / `objectDefineOwnProperty` | Object metadata; `defineOwnProperty` converts its value with `toJSValue`. |
+| `requireArkModule` | Load an Ark module, then `retain` the result. |
+| `requireSystemNativeModule(moduleName)` | Load a system native module without a prefix; delegates to the two-argument overload with `None`. |
+| `requireSystemNativeModule(moduleName, prefix)` | Load a system native module with an explicit optional prefix, then `retain` the result. |
+
 ```cangjie
 public static func undefined(): Extern<T> { run { retain(context.undefined().toJSValue()) } }
 public static func null(): Extern<T>      { run { retain(context.null().toJSValue()) } }
@@ -693,17 +693,6 @@ public static func requireSystemNativeModule(
     run { retain(context.requireSystemNativeModule(moduleName, prefix: prefix)) }
 }
 ```
-
-| API | Role |
-| --- | --- |
-| `undefined()` / `null()` / `object()` / `symbol(...)` | Construct a JS value, then `retain` it. |
-| `global()` | Return the context's global object through `retain`. |
-| `strictEqual(a, b)` | Evaluate both operands and apply JS `===`. |
-| `isNull` / `isUndefined` | Evaluate the operand and test the resulting `JSValue`. |
-| `objectHasProperty` / `objectKeys` / `objectDefineOwnProperty` | Object metadata; `defineOwnProperty` converts its value with `toJSValue`. |
-| `requireArkModule` | Load an Ark module, then `retain` the result. |
-| `requireSystemNativeModule(moduleName)` | Load a system native module without a prefix; delegates to the two-argument overload with `None`. |
-| `requireSystemNativeModule(moduleName, prefix)` | Load a system native module with an explicit optional prefix, then `retain` the result. |
 
 ---
 
@@ -958,7 +947,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
     match (tree) {
         case ...
         case ExternSequence(first, second) =>
-            evalTree(first)          // local handle, released when the scope closes
+            evalTree(first)          // local handle
             evalTree(second)
         case _ =>
             evalTree(ForeignRuntime<T>.evalDerived(tree))
@@ -1022,29 +1011,23 @@ private static func flattenMemberPath(
 
 private static func evalTree(tree: Extern<T>): JSValue {
     match (tree) {
-        case ExternPayload(h) => match ((h as ArkTSHandle).getOrThrow()) {
-            case Imm(value) => value
-            case Ref(owner) => owner.toJSValue()
-        }
         case ExternMemberAccess(_, _) =>
             let (root, fields) = flattenMemberPath(tree)
             getPropertyPath(evalTree(root), fields)
         case ...
     }
 }
-
-// a.b.c.d → getPropertyPath(a, ["b", "c", "d"])
 ```
 
 This replaces:
 
-```text
+```cangjie
 a.getProperty("b").getProperty("c").getProperty("d")
 ```
 
 with:
 
-```text
+```cangjie
 getPropertyPath(a, ["b", "c", "d"])
 ```
 
