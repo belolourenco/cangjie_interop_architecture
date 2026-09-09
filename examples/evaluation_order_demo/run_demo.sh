@@ -14,13 +14,17 @@ require_command python3
 require_command node
 require_command java
 require_command cjc
+require_command rustc
 
-cangjie_build_dir="$(mktemp -d)"
-trap 'rm -rf -- "$cangjie_build_dir"' EXIT
+evaluation_build_dir="$(mktemp -d)"
+trap 'rm -rf -- "$evaluation_build_dir"' EXIT
 
 python3 "$evaluation_demo_dir/evaluation_order.py"
 node "$evaluation_demo_dir/evaluation_order.js"
 java "$evaluation_demo_dir/EvaluationOrder.java"
 
-cjc "$evaluation_demo_dir/evaluation_order.cj" -o "$cangjie_build_dir/evaluation_order"
-"$cangjie_build_dir/evaluation_order"
+cjc "$evaluation_demo_dir/evaluation_order.cj" -o "$evaluation_build_dir/evaluation_order_cj"
+"$evaluation_build_dir/evaluation_order_cj"
+
+rustc "$evaluation_demo_dir/evaluation_order.rs" -o "$evaluation_build_dir/evaluation_order_rs"
+"$evaluation_build_dir/evaluation_order_rs"
