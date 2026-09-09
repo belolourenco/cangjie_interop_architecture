@@ -109,7 +109,6 @@ abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
 
     // Load ArkTS or system-native modules.
     public static func requireArkModule(specifier: String): Extern<T>
-    public static func requireSystemNativeModule(moduleName: String): Extern<T>
     public static func requireSystemNativeModule(
         moduleName: String,
         prefix: ?String
@@ -664,7 +663,6 @@ that consume an `Extern<T>` use `evalTree`, so callers may pass either a payload
 | `isNull` / `isUndefined` | Evaluate the operand and test the resulting `JSValue`. |
 | `objectHasProperty` / `objectKeys` / `objectDefineOwnProperty` | Object metadata; `defineOwnProperty` converts its value with `toJSValue`. |
 | `requireArkModule` | Load an Ark module, then `retain` the result. |
-| `requireSystemNativeModule(moduleName)` | Load a system native module without a prefix; delegates to the two-argument overload with `None`. |
 | `requireSystemNativeModule(moduleName, prefix)` | Load a system native module with an explicit optional prefix, then `retain` the result. |
 
 ```cangjie
@@ -681,10 +679,6 @@ public static func strictEqual(lhs: Extern<T>, rhs: Extern<T>): Bool {
 }
 public static func isNull(value: Extern<T>): Bool      { run { evalTree(value).isNull() } }
 public static func isUndefined(value: Extern<T>): Bool { run { evalTree(value).isUndefined() } }
-
-public static func requireSystemNativeModule(moduleName: String): Extern<T> {
-    requireSystemNativeModule(moduleName, None)
-}
 
 public static func requireSystemNativeModule(
     moduleName: String,
@@ -1061,6 +1055,36 @@ case ExternMemberUpdate(target, field, value) =>
 
 A future `ARKTS_SetPropertyPath` must read every field except the last, convert `value`,
 and then update the last field, preserving the existing evaluation and exception order.
+
+### Name resolution caching
+
+Repeated member access should cache only the conversion of a Cangjie field name to an
+ArkTS property key. The cache belongs to the concrete `ArkTS<T>` specialization and is
+used on the bind thread:
+
+```cangjie
+private static let propertyNames = HashMap<String, JSString>()
+
+private static func propertyName(field: String): JSString {
+    match (propertyNames.get(field)) {
+        case Some(name) => name
+        case None =>
+            let name = context.string(field)
+            propertyNames.add(field, name)
+            name
+    }
+}
+
+// Used by both a single access and every component of a batched path.
+target.getProperty(propertyName(field))
+```
+
+Thus the first access to `a.foo` creates the ArkTS string for `"foo"`; later accesses
+reuse it and avoid another string conversion. The resolved value of `a.foo` is never
+cached: every access still performs normal ArkTS property lookup, preserving reassignment,
+getters, proxy traps, and exceptions.
+
+
 
 ### Not part of the current proposal, but possible: Send the entire `Extern` tree at once
 
