@@ -350,7 +350,7 @@ the compiler builds a tree for the Extern typed expressions and calls `ForeignRu
 
 ```cangjie
 let calculator: Extern<T> = T.eval(ExternMemberAccess(vm, "calculator"))
-let result: Float64 = T.fromExterrn<Float64>(ExternFunctionCall(ExternMemberAccess(calculator, add), [2, 3.5]))
+let result: Float64 = T.fromExterrn<Float64>(ExternFunctionCall(ExternMemberAccess(calculator, "add"), [2, 3.5]))
 ```
 
 In section 3.1 we introduce the changes to standard library core and in section 3.2 we introduce the changes to the compiler.
@@ -419,7 +419,7 @@ Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `Ex
 | `ExternUnsupportedOperation` | Runtime implementer doesn't implement optimization |
 
 
-#### API contract <span id="api-contract"></span>
+#### API documentation <span id="api-documentation"></span>
 
 ⚠️new: new section
 
@@ -716,7 +716,7 @@ T.eval(E2)
 
 The sequence of `T.eval` can be combined into a single operation so that there's one call to `T.eval` instead of two.
 
-For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API contract](#api-contract).
+For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API documentation](#api-documentation).
 
 First of all, we add a new constructor to the `Extern<T>` enum and handle it in `evalDerived`:
 
@@ -745,7 +745,7 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-`ForeignRuntime`s implementations are not required to support the `ExternSequence` constructor in their `eval` function if they adhere to the API contract.
+`ForeignRuntime`s implementations are not required to support the `ExternSequence` constructor in their `eval` function if they adhere to the API documentation.
 
 The compiler can now optimize expressions of the form
 
