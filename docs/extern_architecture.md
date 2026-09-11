@@ -1,8 +1,11 @@
 # Architecture/Feature Design Document: Cangjie `Extern<T>` Type
 
 **Feature:** Language-level dynamic interoperability via `Extern<T>` and `ForeignRuntime<T>`
+
 **Spec:** [The Cangjie Extern type](https://wiki.huawei.com/domains/4014/wiki/11230/WIKI2026040810696277)
+
 **Implementation PR (ongoing):** [cangjie_compiler#1871 — feat: extern runtime](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)
+
 **SDK branch (ongoing):** [CJPLUK/cangjie_sdk — feature_extern_runtime](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern_runtime) (cangjie_compiler, cangjie_runtime, cangjie_test, and cangjie_tools git submodules at matching commits)
 
 ---
@@ -13,7 +16,9 @@
 ---
 # Changes/fixes since last architecture meeting (23/07/2026)
 
-The changes since last meeting are marked with "⚠️new:".
+- Desugar extern expressions as trees.
+- Section with possible optimizations in the foreign Runtime.
+- Optimizations in CHIR.
 
 ---
 # Changes/fixes since last architecture meeting (16/07/2026)
@@ -222,8 +227,6 @@ func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
 
 ### Position in the system <span id="position-in-the-system"></span>
 
-⚠️new: Optimizations are implemented in CHIR
-
 Compilation stages according to [cangjie_compiler/src/Frontend/CompilerInstance.cpp](https://gitcode.com/Cangjie/cangjie_compiler/blob/main/src/Frontend/CompilerInstance.cpp).
 
 This document is mostly about the boxes in red.
@@ -361,8 +364,6 @@ We introduce a **new file**: `stdlib/libs/std/core/extern_runtime.cj` containing
 
 #### `Extern<T>` enum <span id="externt-enum"></span>
 
-⚠️new: changed `Extern` definition
-
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
     // primitive constructors
@@ -390,8 +391,6 @@ Even though we define `Extern<T>` as being non-exhaustive we require new constru
 
 #### `ForeignRuntime<T>` interface
 
-⚠️new: changed `ForeignRuntime<T>` definition
-
 ```cangjie
 public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
     static func fromExtern<R>(e: Extern<T>): R
@@ -404,8 +403,6 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`, and to call `Extern<T>.evalDerived` in the default case.
 
 #### Exception hierarchy (all in `std.core`) <span id="exception-hierarchy-all-in-stdcore"></span>
-
-⚠️new: new exception `ExternUnsupportedOperation`
 
 | Exception | When raised |
 | --- | --- |
@@ -420,8 +417,6 @@ Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `Ex
 
 
 #### API documentation <span id="api-documentation"></span>
-
-⚠️new: new section
 
 `ForeignRuntime` implementers **must** implement the following functions:
 
@@ -470,8 +465,6 @@ Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(
 
 #### 3.2.2 Type checking rules
 
-⚠️new: changed last rule: the result of member and indexed update is of type `Extern`
-
 | Expression | Rule |
 | --- | --- |
 | `(U)e` | Succeeds if `e: Extern<T>` and `U` is a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
@@ -503,8 +496,6 @@ foo(..., R.toExtern<Int64>(42), ...)
 ```
 
 #### 3.2.4 Dynamic Extern expression desugaring
-
-⚠️new: desugaring rules changed
 
 The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the result.
 
@@ -632,8 +623,6 @@ Multiple assignment of the form `(x1, ..., x3) = ...` remains consistent with th
 
 ### 4.1. Runtime implementer possible optimizations
 
-⚠️new: new section
-
 Because `eval` / `fromExtern` receive an `Extern` *tree* (nested operands are not pre-evaluated), the runtime can specialize common shapes.
 
 #### Possible optimization 1: path access
@@ -704,8 +693,6 @@ A naive `eval` crosses the FFI boundary once per constructor (6 times here), and
 
 
 ### 4.2. Compiler Optimizations <span id="compiler-optimizations"></span>
-
-⚠️new: new section
 
 The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose the following:
 
