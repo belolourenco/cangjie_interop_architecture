@@ -11,7 +11,11 @@
 ---
 # Changes/fixes since last architecture meeting (10/09/2026)
 
-- Removed section about `T.fromExtern<R>(T.eval(t)) -> T.fromExtern<T>(t)`. Desugaring directly creates `T.fromExtern<T>(t)` from `(T)...`!
+- Removed section about `T.fromExtern<R>(T.eval(t))` to `T.fromExtern<T>(t)` optimization. Desugaring directly creates `T.fromExtern<T>(t)` from `(T)...`.
+
+- ExternCompoundAssignment is now part of Extern enum
+
+- `evalDerived` moved into `Extern` enum
 
 ---
 # Changes/fixes since last architecture meeting (23/07/2026)
@@ -418,7 +422,7 @@ Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `Ex
 | `ExternUnsupportedOperation` | Runtime implementer doesn't implement optimization |
 
 
-#### API documentation <span id="api-documentation"></span>
+#### API contract <span id="api-contract"></span>
 
 `ForeignRuntime` implementers **must** implement the following functions:
 
@@ -705,7 +709,7 @@ T.eval(E2)
 
 The sequence of `T.eval` can be combined into a single operation so that there's one call to `T.eval` instead of two.
 
-For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API documentation](#api-documentation).
+For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API contract](#api-contract).
 
 First of all, we add a new constructor to the `Extern<T>` enum and handle it in `evalDerived`:
 
