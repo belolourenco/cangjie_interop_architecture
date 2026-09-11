@@ -17,7 +17,9 @@
 # Changes/fixes since last architecture meeting (23/07/2026)
 
 - Desugar extern expressions as trees.
+
 - Section with possible optimizations in the foreign Runtime.
+
 - Optimizations in CHIR.
 
 ---
