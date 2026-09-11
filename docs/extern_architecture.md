@@ -374,12 +374,18 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
     | ExternFunctionCall(Extern<T>,  /* args  */ Array<Any>)
     // derived constructors
     | ...
+
+    public static func evalDerived(e: Extern<T>): Extern<T> {
+        match(e) {
+            case _ => throw ExternUnsupportedOperation()
+        }
+    }
 }
 ```
 
 The `Extern<T>` constructors above are said to be the primitive `Extern` constructors.
 
-Even though we define `Extern<T>` as being non-exhaustive we require new constructors to be derived from the others - more on this in the next subsection.
+Even though we define `Extern<T>` as being non-exhaustive we require new constructors to be derived from the others. The `evalDerived` function is intended to implement how new constructors should be evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Compiler Optimizations](#compiler-optimizations).
 
 #### `ForeignRuntime<T>` interface
 
@@ -391,14 +397,10 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
     static func toExtern<R>(v: R): Extern<T>
 
     static func eval(t: Extern<T>): Extern<T>
-
-    static func evalDerived(t: Extern<T>): Extern<T> {
-        throw ExternUnsupportedOperation()
-    }
 }
 ```
 
-The goal of `evalDerived` is to define how the derived constructors are evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Compiler Optimizations](#compiler-optimizations).
+Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`, and to call `Extern<T>.evalDerived` in the default case.
 
 #### Exception hierarchy (all in `std.core`) <span id="exception-hierarchy-all-in-stdcore"></span>
 
@@ -422,19 +424,13 @@ The goal of `evalDerived` is to define how the derived constructors are evaluate
 `ForeignRuntime` implementers **must** implement the following functions:
 
 1. `static func fromExtern<R>(e: Extern<T>): R`
-    - the argument `e: Extern<T>` is not guaranteed to be evaluated, that is, it isn't necessarily of the form `ExternPayload(...)` (e.g. `T.fromExtern<Int64>(ExternMemberAccess(e2, "foo"))`, for some `e2: Extern<T>`).
     - must throw `ExternConversionException` if a conversion exception occurs.
 2. `static func toExtern<R>(v: R): Extern<T>`
     - must throw `ExternConversionException` if a conversion exception occurs.
 3. `static func eval(t: Extern<T>): Extern<T>`
-    - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`
     - must call `evalDerived` in the default case.
-    - if `t` is `ExternIndexedAccess(e, index)` then `e` is not guaranteed to be evaluated; furthermore, if `index is Extern<T>`, then `index` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedAccess(e1, ExternMemberAccess(e2, "rank")))`)
-    - if `t` is `ExternMemberUpdate(e, field, value)` then `e` is not guaranteed to be evaluated; furthermore, if `value is Extern<T>`, then `value` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternMemberUpdate(e1, "f1", ExternMemberAccess(e2, "f2")))`)
-    - if `t` is `ExternIndexedUpdate(e, index, value)` then `e` is not guaranteed to be evaluated; furthermore, if `index is Extern<T>`, then `index` and `value` are not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.eval(ExternIndexedUpdate(e1, ExternMemberAccess(e2, "rank"), ExternMemberAccess(e3, "f3")))`)
-    - if `t` is `ExternFunctionCall(e, args)` then `e` is not guaranteed to be evaluated; furthermore, if a `arg` from `args` is `Extern<T>` then `arg` is not guaranteed to be evaluated (e.g. the call to `eval` can be of the form `T.evalExternFunctionCall(e1, [ExternMemberAccess(e2, "f2")]))`)
-
-`ForeignRuntime` implementers **must not** override `evalDerived`.
+    - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`.
+    - must call `Extern<T>.evalDerived(t)` in the default case.
 
 Example:
 
@@ -448,7 +444,7 @@ public class MockRT <: ForeignRuntime<MockRT> {
             case ExternMemberUpdate(e, field, value) => /* specific implementation of ExternMemberUpdate */ throw ExternMemberAccessException()
             case ExternIndexedUpdate(e, index, value) => /* specific implementation of ExternIndexedUpdate */ throw ExternIndexedAccessException()
             case ExternFunctionCall(e, args) => /* specific implementation of ExternFunctionCall */ throw ExternFunctionAccessException()
-            case _ => ForeignRuntime<MockRT>.evalDerived(t) // <==== Calling `evalDerived` from `ForeignRuntime<MockRT>`
+            case _ => Extern<MockRT>.evalDerived(t) // <==== Calling `evalDerived` from `Extern<T>`
         }
     }
     public static func fromExtern<R>(e: Extern<MockRT>): R { throw ExternConversionException() }
@@ -456,7 +452,7 @@ public class MockRT <: ForeignRuntime<MockRT> {
 }
 ```
 
-Note how the default case (`case _ => ...`) invokes `ForeignRuntime<MockRT>.evalDerived(t)` so that new derived constructors are supported out of the box.
+Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(t)` so that new derived constructors are supported out of the box.
 
 ### 3.2 Compiler changes
 
@@ -730,32 +726,23 @@ The sequence of `T.eval` can be combined into a single operation so that there's
 
 For this to be happen we extend the `Extern` enumeration by adding a constructor - this change is API/ABI compatible and must not break `ForeignRuntime`s implementation that adhere to the [Foreign Runtime API contract](#api-contract).
 
-First of all, we add a new constructor to the `Extern<T>` enum:
+First of all, we add a new constructor to the `Extern<T>` enum and handle it in `evalDerived`:
 
 ```cangjie
 public enum Extern<T> where T <: ForeignRuntime<T> {
+    // primitive constructors
     | ExternPayload(Any)
     | ExternMemberAccess(Extern<T>,  /* field */ String)
     | ExternIndexedAccess(Extern<T>, /* index */ Any)
     | ExternMemberUpdate(Extern<T>,  /* field */ String, /* value */ Any)
     | ExternIndexedUpdate(Extern<T>, /* index */ Any,    /* value */ Any)
     | ExternFunctionCall(Extern<T>,  /* args  */ Array<Any>)
+    // derived constructors
     | ExternSequence(Extern<T>, Extern<T>)
     | ...
-}
-```
 
-And now define the evaluation of `ExternSequence` in terms of the basic operations.
-
-```cangjie
-public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
-    static func fromExtern<R>(e: Extern<T>): R
-    static func toExtern<R>(v: R): Extern<T>
-
-    static func eval(t: Extern<T>): Extern<T>
-
-    static func evalDerived(t: Extern<T>): Extern<T> {
-        match (t) {
+    public static func evalDerived(e: Extern<T>): Extern<T> {
+        match(e) {
             case ExternSequence(e1, e2) =>
                 T.eval(e1)
                 return T.eval(e2)
@@ -792,6 +779,13 @@ ArkTS.eval(ExternMemberUpdate(e1, "b", eb))
 ArkTS.eval(ExternSequence(
     ExternMemberUpdate(e1, "a", ea),
     ExternMemberUpdate(e1, "b", eb)))
+```
+
+Once the foreign runtime is made aware of the new ExternSequence constructor, support for it can be implemented, potentially enabling new optimizations.
+
+Example:
+```cangjie
+
 ```
 
 ## 5. Summary of Key DT Test Cases
