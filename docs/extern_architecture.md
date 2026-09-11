@@ -460,25 +460,26 @@ Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(
 
 ### 3.2 Compiler changes
 
-#### Type checking rules
+
+#### 3.2.1 Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
+
+- **Parse:** `ForcedCastExpr` AST node holds both readings (e.g. during parsing we don't know if `(U)(e)` is forced cast or function call).
+- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime<T>`; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
+- **Disambiguation:** If `U` is a type, `(U)(e)` is a forced cast; if `U` is an expression, then `(U)(e)` is function application.
+- **Desugar:** `(U)e` → `T.fromExtern<U>(e)`.
+
+#### 3.2.2 Type checking rules
 
 ⚠️new: changed last rule: the result of member and indexed update is of type `Extern`
 
 | Expression | Rule |
 | --- | --- |
-| `(U)e` | Succeeds if `e: Extern<T>` and `U` a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
+| `(U)e` | Succeeds if `e: Extern<T>` and `U` is a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
 | `e` where `Extern<T>` expected | Always succeeds; either `e` is already `Extern<T>` or it is desugared into `T.toExtern<U>(e)` if `e: U` and `U != Extern<T>` |
-| `e.f`, `e[i]`, `e(...)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or arguments |
+| `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or `a1, ..., an` |
 | `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; no check on `f`, `i`, or `v` |
 
-#### Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
-
-- **Parse:** `ForcedCastExpr` AST node holds both readings (e.g. during parsing we don't know if `(U)(e)` is forced cast or function call).
-- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime<T>`.; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
-- **Disambiguation:** If `U` is a type, `(U)(e)` is a forced cast; if `U` is an expression, then `(U)(e)` is function application.
-- **Desugar:** `(U)e` → `T.fromExtern<U>(e)`.
-
-#### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
+#### 3.2.3 Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
 When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function) we desugar it into `T.toExtern<U>(cjexp)`.
 
@@ -486,7 +487,6 @@ When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expres
 Assume `cjexp` has type `U` with `U != Extern<T>`. Then:
 
 `let x: Extern<R> = cjexp` is desugared into `let x: Extern<R> = R.toExtern<U>(cjexp)`
-
 
 **Example 2**:
 
@@ -502,7 +502,7 @@ func foo(..., x: Extern<R>, ...) {...}
 foo(..., R.toExtern<Int64>(42), ...)
 ```
 
-#### Dynamic expression desugaring
+#### 3.2.4 Dynamic Extern expression desugaring
 
 ⚠️new: desugaring rules changed
 
@@ -525,9 +525,9 @@ BUILD_TREE(e1 op= e2)       = ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD
 BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, for non-Extern expressions desugar subexpressions
 ```
 
-`BUILD_TREE` builds dynamic `Extern` trees. Otherwise, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its  subexpressions.
+For `Extern` expressions, `BUILD_TREE` builds dynamic `Extern` trees. For non-`Extern` Cangjie expressions, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its subexpressions.
 
-**IMPORTANT**: For `Extern` expressions, evaluation order is defined by the foreign-runtime implementation; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order is preserved. The specification must account for this distinction.
+**IMPORTANT**: For the `Extern` expression trees, the evaluation order is defined by the foreign-runtime implementation; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order applies. The specification must account for this distinction.
 
 Example 1:
 
@@ -556,6 +556,20 @@ Example 3:
 For `e1, e2: Extern<T>`.
 
 ```cangjie
+DESUGAR(e1.x += e2) =
+    T.eval( ExternCompoundAssignment(
+                ExternMemberAccess(e1, "x"),
+                "+",
+                e2
+            )
+    )
+```
+
+Example 4:
+
+For `e1, e2: Extern<T>`.
+
+```cangjie
 DESUGAR(e1.items[e2.value]) =
     T.eval( ExternIndexedAccess(
                 ExternMemberAccess(e1, "items"),
@@ -564,7 +578,7 @@ DESUGAR(e1.items[e2.value]) =
     )
 ```
 
-Example 4:
+Example 5:
 
 For `e1, e2, e3: Extern<T>`.
 
@@ -578,7 +592,21 @@ DESUGAR(e1.items[e2.value] = e3.result) =
     )
 ```
 
-Example 5:
+Example 6:
+
+For `e1, e2, e3: Extern<T>`.
+
+```cangjie
+DESUGAR(e1.items[e2].x -= e3.result) =
+    T.eval( ExternCompoundAssignment(
+                ExternMemberAccess(ExternIndexedAccess(ExternMemberAccess(e1, "items"), x), "x"),
+                "-",
+                ExternMemberAccess(e3, "result")
+            )
+    )
+```
+
+Example 7:
 
 For `e1, e2, e3: Extern<T>`, `n: Int64`.
 
@@ -813,8 +841,6 @@ public class MockRT <: ForeignRuntime<MockRT> {
     }
 }
 ```
-
-A runtime 
 
 ---
 
