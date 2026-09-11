@@ -6,6 +6,11 @@
 **SDK branch (ongoing):** [CJPLUK/cangjie_sdk — feature_extern_runtime](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern_runtime) (cangjie_compiler, cangjie_runtime, cangjie_test, and cangjie_tools git submodules at matching commits)
 
 ---
+# Changes/fixes since last architecture meeting (10/09/2026)
+
+- Removed section about `T.fromExtern<R>(T.eval(t)) -> T.fromExtern<T>(t)`. Desugaring directly creates `T.fromExtern<T>(t)` from `(T)...`!
+
+---
 # Changes/fixes since last architecture meeting (23/07/2026)
 
 The changes since last meeting are marked with "⚠️new:".
@@ -187,7 +192,7 @@ func testCJ(runtime: JSContext, callInfo: JSCallInfo): Unit {
 
 ```cangjie
 func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
-    let calculator = vm.calculator
+    let calculator: Extern<T> = vm.calculator
     let result: Float64 = (Float64)calculator.add(2, 3.5)
     println("Result: ${result}")
 }
@@ -337,14 +342,14 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 For the code below where `vm: Extern<T>` and `T <: ForeignRuntime`
 
 ```cangjie
-let calculator = vm.calculator
+let calculator: Extern<T> = vm.calculator
 let result: Float64 = (Float64)calculator.add(2, 3.5)
 ```
 
 the compiler builds a tree for the Extern typed expressions and calls `ForeignRuntime` static functions.
 
 ```cangjie
-let calculator = T.eval(ExternMemberAccess(vm, "calculator"))
+let calculator: Extern<T> = T.eval(ExternMemberAccess(vm, "calculator"))
 let result: Float64 = T.fromExterrn<Float64>(ExternFunctionCall(ExternMemberAccess(calculator, add), [2, 3.5]))
 ```
 
@@ -393,7 +398,7 @@ public interface ForeignRuntime<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-The goal of `evalDerived` is to define how the derived constructors are evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Optimization 2](#optimization-2).
+The goal of `evalDerived` is to define how the derived constructors are evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Compiler Optimizations](#compiler-optimizations).
 
 #### Exception hierarchy (all in `std.core`) <span id="exception-hierarchy-all-in-stdcore"></span>
 
@@ -710,35 +715,11 @@ e.a.b(c.d, f[0]).g
 A naive `eval` crosses the FFI boundary once per constructor (6 times here), and optimization 1 fuses only pure member paths. Encoding the tree and evaluating it on the C / VM side handles a mixed member / index / call expression in a single crossing.
 
 
-### 4.2. Compiler Optimizations
+### 4.2. Compiler Optimizations <span id="compiler-optimizations"></span>
 
 ⚠️new: new section
 
-The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose two optimizations.
-
-#### Optimization 1
-
-`T.fromExtern<R>(T.eval(E))` can be optimized as `T.fromExtern<R>(E)`, avoiding the creation of an Extern value.
-
-###### Example
-Consider the following code, where `person` is of type `Extern<T>`.
-```cangjie
-let name = (String)person.name
-```
-
-The compiler desugars as
-```cangjie
-let name = T.fromExtern<String>(T.eval(ExternMemberAccess(person, name)))
-```
-
-This can be optimized to
-```cangjie
-let name = T.fromExtern<String>(ExternMemberAccess(person, name))
-```
-
-This optimization can be implemented immediately when desugaring or in CHIR.
-
-#### Optimization 2 <span id="optimization-2"></span>
+The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose the following:
 
 ```cangjie
 T.eval(E1)
@@ -801,26 +782,16 @@ T.eval(ExternSequence(E1, E2))
 
 Example:
 
-Let `e1` and `e2` be expressions with `Extern<T>` type. Then
-
 ```cangjie
-e1.a = e2.foo()
-e1.a
-```
-
-is desugared as
-
-```cangjie
-T.eval(ExternMemberUpdate(e1, "a", ExternMemberAccess(e2, "foo")))
-T.eval(ExternMemberAccess(e1, "a"))
-```
-
-and optimized in CHIR as
-
-```cangjie
-T.eval(ExternSequence(ExternMemberUpdate(e1, "a", ExternMemberAccess(e2, "foo")), 
-       ExternMemberAccess(e1, "a"))
-      )
+e1.a = ea
+e1.b = eb
+// desugared as →
+ArkTS.eval(ExternMemberUpdate(e1, "a", ea))
+ArkTS.eval(ExternMemberUpdate(e1, "b", eb))
+// optimized as →
+ArkTS.eval(ExternSequence(
+    ExternMemberUpdate(e1, "a", ea),
+    ExternMemberUpdate(e1, "b", eb)))
 ```
 
 ## 5. Summary of Key DT Test Cases
