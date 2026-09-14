@@ -4,10 +4,6 @@
 
 **Spec:** [The Cangjie Extern type](https://wiki.huawei.com/domains/4014/wiki/11230/WIKI2026040810696277)
 
-**Implementation PR (ongoing):** [cangjie_compiler#1871 — feat: extern runtime](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)
-
-**SDK branch (ongoing):** [CJPLUK/cangjie_sdk — feature_extern_runtime](https://github.com/CJPLUK/cangjie_sdk/tree/feature_extern_runtime) (cangjie_compiler, cangjie_runtime, cangjie_test, and cangjie_tools git submodules at matching commits)
-
 ---
 # Changes/fixes since last architecture meeting (10/09/2026)
 
@@ -316,11 +312,11 @@ flowchart TB
 | --- | --- |
 | `cangjie_runtime` - std.core | (1) New file [`extern_runtime.cj`](https://gitcode.com/claudio_/cangjie_runtime/blob/feature_extern_runtime/stdlib/libs/std/core/extern_runtime.cj) in `std.core` with `Extern<T>` enum, `ForeignRuntime<T>` interface, new exceptions, and documentation about new public declarations. |
 | `cangjie_runtime` - std.ast | (2) New `ForcedCastExpr <: Expr` class. Class declaration, flatbuffers serialization. |
-| `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to the type checking stage. |
+| `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to SEMA. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
-| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. |
-| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. |
-| `cangjie_compiler` - CHIR | (7) Extern optimizations.  |
+| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2](#322-type-checking-rules). |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-implicit-conversion-to-externt) and [3.2.4](#324-dynamic-extern-expression-desugaring). |
+| `cangjie_compiler` - CHIR | (7) Extern optimizations. Example in section [4.2](#42-compiler-optimizations). |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
 No changes in the compiler backend or any specific OS-specific features.
@@ -348,21 +344,26 @@ External developers will see new `Extern<T>`, `ForeignRuntime<R>` types and `(U)
 
 ## 3. Design/Implementation Plan
 
-For the code below where `vm: Extern<T>` and `T <: ForeignRuntime`
+Consider the following a motivational example for this section.
 
 ```cangjie
-let calculator: Extern<T> = vm.calculator
-let result: Float64 = (Float64)calculator.add(2, 3.5)
+// vm: Extern<T>, T <: ForeignRuntime
+let calculator : Extern<T> = vm.calculator
+let sum        : Extern<T> = calculator.add(2, 3.5)
+let result     : Float64   = (Float64)sum
 ```
 
-the compiler builds a tree for the Extern typed expressions and calls `ForeignRuntime` static functions.
+During compilation, the example above is desugared as follows.
 
 ```cangjie
-let calculator: Extern<T> = T.eval(ExternMemberAccess(vm, "calculator"))
-let result: Float64 = T.fromExterrn<Float64>(ExternFunctionCall(ExternMemberAccess(calculator, "add"), [2, 3.5]))
+let calculator : Extern<T> = T.eval(ExternMemberAccess(vm, "calculator"))
+let sum        : Extern<T> = T.eval(ExternFunctionCall(ExternMemberAccess(calculator, "add"), [2, 3.5]))
+let result     : Float64   = T.fromExterrn<Float64>(sum)
 ```
 
-In section 3.1 we introduce the changes to standard library core and in section 3.2 we introduce the changes to the compiler.
+The compiler builds a tree for the Extern typed expressions and calls `ForeignRuntime` static functions.
+
+Section 3.1 introduces the changes to standard library core, and Section 3.2 introduces the changes required in the compiler.
 
 ### 3.1 Standard library (`std.core`)
 
