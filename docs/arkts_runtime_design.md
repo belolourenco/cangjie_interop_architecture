@@ -728,7 +728,7 @@ T.eval(ExternSequence(E1, E2))
 ```
 
 A runtime is not required to handle it. The `case _` branches of `eval` and `evalTree`
-delegate to `ForeignRuntime<T>.evalDerived`, whose default implementation evaluates `E1`,
+delegate to `Extern<T>.evalDerived`, whose default implementation evaluates `E1`,
 discards its result, and returns `T.eval(E2)`. That is already correct, but for `ArkTS<T>`
 it re-enters `eval` twice: two `run` dispatches, two engine scopes, and a global handle for
 the result of `E1` that no Cangjie code can observe.
@@ -742,7 +742,7 @@ public static func eval(tree: Extern<T>): Extern<T> {
         case ...
         case ExternSequence(_, _) =>
             run { retain(evalTree(tree)) }
-        case _ => ForeignRuntime<T>.evalDerived(tree)
+        case _ => Extern<T>.evalDerived(tree)
     }
 }
 
@@ -753,7 +753,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
             evalTree(first)          // local handle
             evalTree(second)
         case _ =>
-            evalTree(ForeignRuntime<T>.evalDerived(tree))
+            evalTree(Extern<T>.evalDerived(tree))
     }
 }
 ```
@@ -814,7 +814,7 @@ private static func evalTree(tree: Extern<T>): JSValue {
                     evalTree(second)
             }
         case _ =>
-            evalTree(ForeignRuntime<T>.evalDerived(tree))
+            evalTree(Extern<T>.evalDerived(tree))
     }
 }
 ```
