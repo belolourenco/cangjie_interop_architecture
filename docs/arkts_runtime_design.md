@@ -210,7 +210,10 @@ flowchart TD
 ```cangjie
 private static func run<R>(operation: () -> R): R {
     if (context.isInBindThread()) {
-        return operation()                       // (a) already on JS thread: run immediately
+        // (a) already on JS thread: run immediately
+        return context.newScope {
+            operation()
+        }
     }
 
     // (b) other thread: hand the work to the JS thread and block for its result
@@ -224,7 +227,10 @@ private static func run<R>(operation: () -> R): R {
     context.postJSTask {
         let completed: ArkTSResult<R> =
             try {
-                ArkTSResult.Ok(operation())
+                let res = context.newScope {
+                    operation()
+                }
+                ArkTSResult.Ok(res)
             } catch (e: Exception) {
                 ArkTSResult.Err(e)
             }
@@ -246,8 +252,8 @@ private static func run<R>(operation: () -> R): R {
 
 Two cases:
 
-- **(a) On the bind thread** — call `operation()` directly.
-- **(b) Off the bind thread** — post `operation` with `postJSTask`, wait on a
+- **(a) On the bind thread** — call `operation()` directly inside a short-lived scope.
+- **(b) Off the bind thread** — post `operation` inside a short-lived scope with `postJSTask`, wait on a
   `Mutex`/`Condition`, then return its value or rethrow its exception. `ArkTSResult<R>` is
   the internal `Ok(R) | Err(Exception)` carrier used to move the outcome across threads.
 
