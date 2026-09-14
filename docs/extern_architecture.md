@@ -631,7 +631,7 @@ Multiple assignment of the form `(x1, ..., x3) = ...` remains consistent with th
 
 Because `eval` / `fromExtern` receive an `Extern` *tree* (nested operands are not pre-evaluated), the runtime can specialize common shapes.
 
-#### Possible optimization 1: path access
+#### Possible optimization 1: path access (needs Extern tree)
 
 ```cangjie
 e.a.b.c
@@ -640,7 +640,14 @@ e.a.b.c
 
 A naive `eval` costs one FFI call and one intermediate handle per member access (3 of each here). The runtime can instead resolve the whole path `["a", "b", "c"]` on `e` in a single call, with no intermediate `Extern` / global handles.
 
-#### Possible optimization 2: short lifetime for intermediate values
+A similar optimization is possible for member update with one path write:
+
+```cangjie
+e.a.b.c = e2
+// T.eval(ExternMemberUpdate(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"), "c", e2))
+```
+
+#### Possible optimization 2: short lifetime for intermediate values (needs Extern tree)
 
 ```cangjie
 e.a.b(c.d, f[0]).g
@@ -684,7 +691,7 @@ let a: Extern<T> = [1, 2, 3]
 
 A naive `toExtern` builds the foreign array one element at a time. Copying the buffer in one go costs a single FFI call for the whole array; the dual is `(Array<Int64>)a` in `fromExtern`.
 
-#### Possible optimization 6: send the whole tree in one FFI call
+#### Possible optimization 6: send the whole tree in one FFI call (needs Extern tree)
 
 ```cangjie
 e.a.b(c.d, f[0]).g
