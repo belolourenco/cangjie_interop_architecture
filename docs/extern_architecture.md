@@ -476,8 +476,8 @@ Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(
 | --- | --- |
 | `(U)e` | Succeeds if `e: Extern<T>` and `U` is a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
 | `e` where `Extern<T>` expected | Always succeeds; either `e` is already `Extern<T>` or it is desugared into `T.toExtern<U>(e)` if `e: U` and `U != Extern<T>` |
-| `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; no check on `f`, `i`, or `a1, ..., an` |
-| `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; no check on `f`, `i`, or `v` |
+| `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `a1, ..., an` need to be valid expressions of any type. |
+| `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `v` need to be valid expressions of any type. |
 
 #### 3.2.3 Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
