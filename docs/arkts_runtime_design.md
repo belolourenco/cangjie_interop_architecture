@@ -5,10 +5,10 @@ ArkTS/JS values from Cangjie.
 
 **Background.** `Extern<T>` represents either an evaluated value in a *foreign memory
 space* or a deferred operation on a foreign runtime. It is a recursive enum whose leaf is
-`ExternPayload(Any)` and whose other variants describe member access, indexed access, updates,
-and calls. The compiler builds these trees from dynamic syntax and passes them to
-`T.eval`. The type parameter `T` implements `ForeignRuntime<T>`; `ArkTS<T>` supplies the
-ArkTS implementation for concrete, self-typed runtime classes.
+`ExternPayload(Any)` and whose other variants describe member access, indexed access,
+updates, compound assignments, and calls. The compiler builds these trees from dynamic
+syntax and passes them to `T.eval`. The type parameter `T` implements `ForeignRuntime<T>`;
+`ArkTS<T>` supplies the ArkTS implementation for concrete, self-typed runtime classes.
 
 Version 1 uses `ohos.ark_interop` as its backend. A later version will replace that backend
 with direct Cangjie FFI bindings to OpenHarmony’s native `ARKTS_*` interface.
@@ -37,6 +37,7 @@ ArkTS.bind(context)                  // bind this runtime instance at entry
 let api: Extern<ArkTS> = ArkTS.requireArkModule("test.ets")
 let blob = api.createRectangle()
 blob.width = 3.0
+blob.width += 2.0
 let a: Float64 = (Float64)blob.area()
 ```
 
@@ -52,13 +53,16 @@ let blob = ArkTS.eval(
 
 ArkTS.eval(ExternMemberUpdate(blob, "width", 3.0))
 
+ArkTS.eval(ExternCompoundAssignment(
+    ExternMemberAccess(blob, "width"), "+", 2.0))
+
 let a: Float64 = ArkTS.fromExtern<Float64>(
                     ExternFunctionCall(ExternMemberAccess(blob, "area"), [])
                  )
 ```
 
-The assigned `3.0` remains an `Any` operand in the tree and is converted by the ArkTS
-evaluator when it performs the update.
+The assigned `3.0` and compound right operand `2.0` remain `Any` operands in their trees
+and are converted by the ArkTS evaluator when it performs each operation.
 
 ## 2. `ArkTS<T>` interface
 
@@ -276,6 +280,7 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
     | ExternMemberUpdate(Extern<T>, String, Any)
     | ExternIndexedUpdate(Extern<T>, Any, Any)
     | ExternFunctionCall(Extern<T>, Array<Any>)
+    | ExternCompoundAssignment(Extern<T>, String, Any)
     // derived constructors
     | ...
 }
@@ -333,6 +338,8 @@ e[i]                  → T.eval(ExternIndexedAccess(e, i))
 e.f = v               → T.eval(ExternMemberUpdate(e, "f", v))
 e[i] = v              → T.eval(ExternIndexedUpdate(e, i, v))
 e(a, b)               → T.eval(ExternFunctionCall(e, [a, b]))
+e.f += v              → T.eval(ExternCompoundAssignment(ExternMemberAccess(e, "f"), "+", v))
+e[i] &&= v            → T.eval(ExternCompoundAssignment(ExternIndexedAccess(e, i), "&&", v))
 
 a.b.c                 → T.eval(ExternMemberAccess(ExternMemberAccess(a, "b"), "c"))
 a.m(10)               → T.eval(ExternFunctionCall(ExternMemberAccess(a, "m"), [10]))
@@ -366,7 +373,7 @@ For a primitive operation, `eval` enters
 performs the same operations recursively, so top-level and nested primitive operations
 have identical semantics while only the top-level result is retained. An existing `ExternPayload` is already
 evaluated and can be returned unchanged. A derived constructor is delegated to the
-standard `ForeignRuntime<T>.evalDerived` implementation, as required by the
+standard `Extern<T>.evalDerived` implementation, as required by the
 `ForeignRuntime` contract.
 
 ```cangjie
@@ -383,7 +390,9 @@ public static func eval(tree: Extern<T>): Extern<T> {
             run { retain(evalIndexedUpdate(target, index, value)) }
         case ExternFunctionCall(callee, arguments) =>
             run { retain(call(callee, arguments)) }
-        case _ => ForeignRuntime<T>.evalDerived(tree)
+        case ExternCompoundAssignment(target, op, value) =>
+            run { retain(evalCompoundAssignment(target, op, value)) }
+        case _ => Extern<T>.evalDerived(tree)
     }
 }
 
@@ -400,8 +409,10 @@ private static func evalTree(tree: Extern<T>): JSValue {
             evalIndexedUpdate(target, index, value)
         case ExternFunctionCall(callee, arguments) =>
             call(callee, arguments)
+        case ExternCompoundAssignment(target, op, value) =>
+            evalCompoundAssignment(target, op, value)
         case _ =>
-            evalTree(ForeignRuntime<T>.evalDerived(tree))
+            evalTree(Extern<T>.evalDerived(tree))
     }
 }
 
@@ -437,7 +448,8 @@ from the same runtime. The `Extern<T>` is a tree node like any other, so it may 
 unevaluated expression; `toJSKeyable` reduces it with `evalTree`, and maps the result onto one of the `JSKeyable` types accepted
 by `getProperty` and `setProperty`: a string becomes a `JSString`, a symbol a `JSSymbol`,
 and a number a `Float64`. `writeIndex` resolves this key before converting the assigned
-value, preserving target–index–value evaluation order.
+value, preserving target–index–value evaluation order. Compound assignment uses the same
+index conversion.
 
 ```cangjie
 private static func readIndex(target: JSValue, index: Any): JSValue {
