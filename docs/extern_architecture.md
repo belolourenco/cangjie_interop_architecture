@@ -91,7 +91,7 @@ Desugaring proposal in [Compound Assignment](#compound-assignment).
 
 is not allowed. Type and expression identifiers share the same namespace.
 
-It's always known if an identifier refers to a `type` or `expression`. Fixed in [Support for forced cast `(U)e`.](#support-for-forced-cast-ue)
+It's always known if an identifier refers to a `type` or `expression`. Fixed in [Support for forced cast `(U)e`.](#321-parsing)
 
 <br/>
 <br/>
@@ -315,7 +315,7 @@ flowchart TB
 | `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to SEMA. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
 | `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2](#322-type-checking-rules). |
-| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-implicit-conversion-to-externt) and [3.2.4](#324-dynamic-extern-expression-desugaring). |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-desugaring-after-sema). |
 | `cangjie_compiler` - CHIR | (7) Extern optimizations. Example in section [4.2](#42-compiler-optimizations). |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
@@ -463,14 +463,30 @@ Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(
 ### 3.2 Compiler changes
 
 
-#### 3.2.1 Support for forced cast `(U)e` <span id="support-for-forced-cast-ue"></span>
+#### 3.2.1 Parsing <span id="parsing"></span>
 
-- **Parse:** `ForcedCastExpr` AST node holds both readings (e.g. during parsing we don't know if `(U)(e)` is forced cast or function call).
-- **Type check:** If `U` is confirmed to be a type, then `e` must be `Extern<T>` for some `T <: ForeignRuntime<T>`; otherwise error: `invalid forced cast: '(U)e' requires 'U' to be a type and 'e' to be an expression of 'Extern' type; use 'as' for ordinary type conversions`.
-- **Disambiguation:** If `U` is a type, `(U)(e)` is a forced cast; if `U` is an expression, then `(U)(e)` is function application.
-- **Desugar:** `(U)e` → `T.fromExtern<U>(e)`.
+Support for forced cast `(U)e` requires the addition of an AST node. At parsing time the syntax is ambiguous and the
+parser cannot decide between a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to
+SEMA. We add `struct AmbiguousForcedCastExpr : Expr` which holds both readings to `include/cangjie/AST/Node.h`.
+
+```cpp
+struct AmbiguousForcedCastExpr : Expr {
+    OwnedPtr<Type> type;      /**< `U` parsed as a type (null if not a valid type). */
+    OwnedPtr<Expr> leftExpr;  /**< `U` parsed as an expression (null if not a valid expr). */
+    OwnedPtr<Expr> rightExpr; /**< Operand, shared by both readings. */
+    ...
+}
+```
+
+Support for the new AST node needs to be added in the compiler macro stage. That includes adding support for it in the
+serialization/deserialization process and also adding it to the Cangjie AST library.
+
+A preliminary implementation can be found
+[here](https://gitcode.com/alksjhdgf/cangjie_compiler_fc/commit/409039511add9fbef51ccc8991ab2c58d8b1ae31?ref=extern_forced_cast).
 
 #### 3.2.2 Type checking rules
+
+The following rules needs to be incorporated in the SEMA stage.
 
 | Expression | Rule |
 | --- | --- |
@@ -479,7 +495,13 @@ Note how the default case (`case _ => ...`) invokes `Extern<MockRT>.evalDerived(
 | `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `a1, ..., an` need to be valid expressions of any type. |
 | `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `v` need to be valid expressions of any type. |
 
-#### 3.2.3 Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
+#### 3.2.3 Desugaring after SEMA
+
+##### Forced cast
+
+At the desugaring stage the remaining operations `(U)e` are not ambiguous anymore and can be desugared as `T.fromExtern<U>(BUILD_TREE(e))`, when `e : Extern<T>` and `T <: ForeignRuntime`. The desugaring function `BUILD_TREE` is defined below.
+
+##### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
 When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function) we desugar it into `T.toExtern<U>(cjexp)`.
 
@@ -502,7 +524,7 @@ func foo(..., x: Extern<R>, ...) {...}
 foo(..., R.toExtern<Int64>(42), ...)
 ```
 
-#### 3.2.4 Dynamic Extern expression desugaring
+##### Dynamic Extern expression desugaring
 
 The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the result.
 
