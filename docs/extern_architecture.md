@@ -526,16 +526,22 @@ foo(..., R.toExtern<Int64>(42), ...)
 
 ##### Dynamic Extern expression desugaring
 
-The desugaring of Extern expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the result.
+The desugaring of `Extern` expressions is performed according to the `DESUGAR` function defined below. It resorts to tree-building function `BUILD_TREE` and applies `T.eval` to the result.
 
-```text
-DESUGAR(exp) = T.eval(BUILD_TREE(exp))    // if exp has type Extern<T>, build tree and call eval
-DESUGAR(exp) = MAP(DESUGAR, exp)          // otherwise, for non-Extern expressions desugar sub expressions
+```cangjie
+DESUGAR((U)exp)          = T.fromExtern<U>(BUILD_TREE(exp))
+DESUGAR(e1.f)            = T.eval(ExternMemberAccess(BUILD_TREE(e1), "f"))                                       // if e1 has type Extern<T>
+DESUGAR(e1.f = e2)       = T.eval(ExternMemberUpdate(BUILD_TREE(e1), "f", BUILD_TREE(e2)))                       // if e1 has type Extern<T>
+DESUGAR(e1[i])           = T.eval(ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i)))                            // if e1 has type Extern<T>
+DESUGAR(e1[i] = e2)      = T.eval(ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2)))            // if e1 has type Extern<T>
+DESUGAR(e1(e2, e3, ...)) = T.eval(ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...]))     // if e1 has type Extern<T>
+DESUGAR(e1 op= e2)       = T.eval(ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD_TREE(e2)))                  // if e1 has type Extern<T>
+DESUGAR(exp)             = MAP(DESUGAR, exp)                                                                     // otherwise, for non-Extern expressions desugar sub expressions.
 ```
 
 For `BUILD_TREE`, the following cases apply when `e1` has type `Extern<T>`:
 
-```text
+```cangjie
 BUILD_TREE(e1.f)            = ExternMemberAccess(BUILD_TREE(e1), "f")
 BUILD_TREE(e1.f = e2)       = ExternMemberUpdate(BUILD_TREE(e1), "f", BUILD_TREE(e2))
 BUILD_TREE(e1[i])           = ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i))
