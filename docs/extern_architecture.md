@@ -501,6 +501,8 @@ The following rules needs to be incorporated in the SEMA stage.
 | `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `a1, ..., an` need to be valid expressions of any type. |
 | `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `v` need to be valid expressions of any type. |
 
+Additionally the compiler should report an error if the user tries to extend the `Extern` type.
+
 #### 3.2.3 Desugaring after SEMA
 
 ##### Forced cast
