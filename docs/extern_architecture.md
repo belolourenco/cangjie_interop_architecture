@@ -7,11 +7,17 @@
 ---
 # Changes/fixes since last architecture meeting (10/09/2026)
 
+
 - Removed section about `T.fromExtern<R>(T.eval(t))` to `T.fromExtern<T>(t)` optimization. Desugaring directly creates `T.fromExtern<T>(t)` from `(T)...`.
 
 - ExternCompoundAssignment is now part of Extern enum
 
 - `evalDerived` moved into `Extern` enum
+
+- Added more details on the [Position in the system section](#position-in-the-system), mostly on the table. This includes where the desugaring occurs.
+
+- [Section Compiler Changes](#32-compiler-changes) divided in three sections: tarsing, type checking rules, desugaring after SEMA.
+
 
 ---
 # Changes/fixes since last architecture meeting (23/07/2026)
@@ -315,7 +321,7 @@ flowchart TB
 | `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to SEMA. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
 | `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2](#322-type-checking-rules). |
-| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-desugaring-after-sema). |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass before the existing ones to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-desugaring-after-sema). |
 | `cangjie_compiler` - CHIR | (7) Extern optimizations. Example in section [4.2](#42-compiler-optimizations). |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
@@ -543,8 +549,10 @@ DESUGAR(e1(e2, e3, ...)) = // if e1 has type Extern<T>
     T.eval(ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...]))
 DESUGAR(e1 op= e2) = // if e1 has type Extern<T>
     T.eval(ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD_TREE(e2)))
-DESUGAR(exp) = // otherwise, for non-Extern expressions desugar sub expressions.
-    MAP(DESUGAR, exp) 
+DESUGAR(base) = // expressions without smaller subexpressions are preserved as they are
+    base
+DESUGAR(exp) = // otherwise, for desugar sub expressions and preserve structure
+    MAP(DESUGAR, exp)
 ```
 
 For `BUILD_TREE`, the following cases apply when `e1` has type `Extern<T>`:
@@ -556,7 +564,7 @@ BUILD_TREE(e1[i])           = ExternIndexedAccess(BUILD_TREE(e1), BUILD_TREE(i))
 BUILD_TREE(e1[i] = e2)      = ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2))
 BUILD_TREE(e1(e2, e3, ...)) = ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...])
 BUILD_TREE(e1 op= e2)       = ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD_TREE(e2))
-BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, for non-Extern expressions desugar subexpressions
+BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, desugar subexpressions and preserve structure
 ```
 
 For `Extern` expressions, `BUILD_TREE` builds dynamic `Extern` trees. For non-`Extern` Cangjie expressions, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its subexpressions.
