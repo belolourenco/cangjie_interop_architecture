@@ -1,6 +1,6 @@
 # ArkTS foreign runtime
 
-This document specifies a generic `ArkTS<T>` foreign-runtime abstraction for accessing
+This document specifies a generic `ArkTSRuntime<T>` foreign-runtime abstraction for accessing
 ArkTS/JS values from Cangjie.
 
 **Background.** `Extern<T>` represents either an evaluated value in a *foreign memory
@@ -11,7 +11,7 @@ syntax and passes them to `T.eval`. The type parameter `T` implements `ForeignRu
 `ArkTS<T>` supplies the ArkTS implementation for concrete, self-typed runtime classes.
 
 Version 1 uses `ohos.ark_interop` as its backend. A later version will replace that backend
-with direct Cangjie FFI bindings to OpenHarmony’s native `ARKTS_*` interface.
+with direct Cangjie FFI bindings to OpenHarmony's native `ARKTS_*` interface.
 
 ## 1. Layering
 
@@ -64,14 +64,14 @@ let a: Float64 = ArkTS.fromExtern<Float64>(
 The assigned `3.0` and compound right operand `2.0` remain `Any` operands in their trees
 and are converted by the ArkTS evaluator when it performs each operation.
 
-## 2. `ArkTS<T>` interface
+## 2. `ArkTSRuntime<T>` interface
 
-`ArkTS<T>` is an abstract base class implementing `ForeignRuntime<T>`. Its public surface
+`ArkTSRuntime<T>` is an abstract base class implementing `ForeignRuntime<T>`. Its public surface
 is summarized below; method bodies are omitted, and the following sections describe the
 semantics and implementation details.
 
 ```cangjie
-abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
+abstract public class ArkTSRuntime<T> <: ForeignRuntime<T> where T <: ArkTSRuntime<T> {
     // Associate this runtime specialization with one JS context.
     public static func bind(newContext: JSContext): Unit
 
@@ -120,21 +120,21 @@ The `eval`, `fromExtern`, and `toExtern` methods form the compiler-facing
 directly by applications and generated bindings.
 
 
-Concrete runtime specializations subclass `ArkTS<T>`:
+Concrete runtime specializations subclass `ArkTSRuntime<T>`:
 
 ```cangjie
-class ArkTS1 <: ArkTS<ArkTS1> {}
-class ArkTS2 <: ArkTS<ArkTS2> {}
+class ArkTS1 <: ArkTSRuntime<ArkTS1> {}
+class ArkTS2 <: ArkTSRuntime<ArkTS2> {}
 ```
 
 ## 3. Context
 
-`ArkTS<T>` is an abstract generic base class whose type parameter identifies a concrete
-ArkTS runtime.
+`ArkTSRuntime<T>` is an abstract generic base class whose type parameter identifies a concrete
+ArkTSRuntime runtime.
 
 `JSContext` is the `ark_interop` handle to one ArkTS/JS engine instance. Each concrete
 specialization can be bound to exactly one context. This permits multiple ArkTS foreign
-runtimes, such as `ArkTS1 <: ArkTS<ArkTS1>` and `ArkTS2 <: ArkTS<ArkTS2>`, without mixing
+runtimes, such as `ArkTS1 <: ArkTSRuntime<ArkTS1>` and `ArkTS2 <: ArkTSRuntime<ArkTS2>`, without mixing
 their values: `Extern<ArkTS1>` and `Extern<ArkTS2>` are different types. The first
 successful call to `bind` permanently installs the context for that specialization. Every
 later call throws `ArkTSContextAlreadyBoundException`, even if it supplies the same
@@ -145,7 +145,7 @@ later call throws `ArkTSContextAlreadyBoundException`, even if it supplies the s
 public class ArkTSContextNotBoundException <: Exception {}
 public class ArkTSContextAlreadyBoundException <: Exception {}
 
-abstract open public class ArkTS<T> <: ForeignRuntime<T> where T <: ArkTS<T> {
+abstract public class ArkTSRuntime<T> <: ForeignRuntime<T> where T <: ArkTSRuntime<T> {
     private static let contextMutex = Mutex()
     private static var context_: ?JSContext = None
 
@@ -286,7 +286,7 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
 }
 ```
 
-For `T <: ArkTS<T>`, an evaluated `Extern<T>` is a `ExternPayload` containing an
+For `T <: ArkTSRuntime<T>`, an evaluated `Extern<T>` is a `ExternPayload` containing an
 `ArkTSHandle`:
 
 ```cangjie
@@ -529,7 +529,7 @@ Example flow for `obj.m(10)`:
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant A as ArkTS<T>
+    participant A as ArkTSRuntime<T>
     participant O as ark_interop
     U->>A: eval(ExternFunctionCall(ExternMemberAccess(obj,"m"),[10]))
     A->>O: evaluate obj once
@@ -582,7 +582,7 @@ Notes:
 
 - An `Extern<T>` from the same concrete runtime goes through `evalTree`: an evaluated
   payload is projected without a copy, and an unevaluated node is evaluated first.
-  An `Extern` belonging to another ArkTS specialization does not match this branch.
+  An `Extern` belonging to another ArkTSRuntime specialization does not match this branch.
 - A Cangjie callback of type `(Extern<T>) -> Extern<T>` becomes a JS function. On
   invocation, all JS arguments are collected into one array and passed to the callback as
   an evaluated `Extern<T>`.
@@ -741,7 +741,7 @@ T.eval(ExternSequence(E1, E2))
 
 A runtime is not required to handle it. The `case _` branches of `eval` and `evalTree`
 delegate to `Extern<T>.evalDerived`, whose default implementation evaluates `E1`,
-discards its result, and returns `T.eval(E2)`. That is already correct, but for `ArkTS<T>`
+discards its result, and returns `T.eval(E2)`. That is already correct, but for `ArkTSRuntime<T>`
 it re-enters `eval` twice: two `run` dispatches, two engine scopes, and a global handle for
 the result of `E1` that no Cangjie code can observe.
 
@@ -840,7 +840,7 @@ receivers are reused for two ordinary updates.
 ### Name resolution caching
 
 Repeated member access should cache only the conversion of a Cangjie field name to an
-ArkTS property key. The cache belongs to the concrete `ArkTS<T>` specialization and is
+ArkTS property key. The cache belongs to the concrete `ArkTSRuntime<T>` specialization and is
 used on the bind thread:
 
 ```cangjie
@@ -903,7 +903,7 @@ case text: String          => stringToJS(text)
 case _: Option<String>     => (stringFromJS(value) as R).getOrThrow()
 ```
 
-The cache is per concrete `ArkTS<T>` specialization because retained handles belong to
+The cache is per concrete `ArkTSRuntime<T>` specialization because retained handles belong to
 its bound context. It should be weak or bounded so cached globals do not live forever.
 This is safe only for immutable values; mutable objects still require normal conversion
 or an explicit invalidation policy.
