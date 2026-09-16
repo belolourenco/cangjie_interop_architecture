@@ -544,6 +544,30 @@ A Cangjie value used where
 `Extern<T>` is expected becomes `T.toExtern`, while a forced cast `(U)e` becomes
 `T.fromExtern<U>(e)`. This section covers those hooks and the internal `toJSValue` helper.
 
+### Type mapping
+
+For each supported `U`, `V` denotes its mapped ArkTS type.
+
+| Cangjie type | ArkTS type |
+| --- | --- |
+| `Unit` | `undefined` |
+| `Bool` | `boolean` |
+| `Int8` | `number` |
+| `Int16` | `number` |
+| `Int32` | `number` |
+| `Int64` | `bigint` |
+| `UInt8` | `number` |
+| `UInt16` | `number` |
+| `UInt32` | `number` |
+| `UInt64` | `bigint` |
+| `Float16` | `number` |
+| `Float32` | `number` |
+| `Float64` | `number` |
+| `BigInt` | `bigint` |
+| `String` | `string` |
+| `Option<U>` | `V \| undefined` |
+| `Array<U>` | `Array<V>` |
+
 ### `toJSValue`: Cangjie value → `JSValue`
 
 This bind-thread helper converts assigned values, call arguments, indexes, and values passed
@@ -555,13 +579,6 @@ decision is deferred to `retain`.
 private static func toJSValue(value: Any): JSValue {
     match (value) {
         case external: Extern<T> => evalTree(external)
-        case callback: ((Extern<T>) -> Extern<T>) =>
-            context.function({ _, info =>
-                let arguments = Array<JSValue>(info.count) { index => info[index] }
-                let externalArguments = retain(context.array(arguments).toJSValue())
-                let result = callback(externalArguments)
-                toJSValue(result)
-            }).toJSValue()
         case boolean: Bool    => context.boolean(boolean).toJSValue()
         case number: Int32    => context.number(number).toJSValue()
         case number: Float64  => context.number(number).toJSValue()
@@ -573,6 +590,7 @@ private static func toJSValue(value: Any): JSValue {
         case items: Array<Bool>       => arrayJSValue(items)
         case items: Array<String>     => arrayJSValue(items)
         case items: Array<Extern<T>>  => arrayJSValue(items)
+        ...
         case _ => throw ExternConversionException("Unsupported conversion to ArkTS")
     }
 }
@@ -583,13 +601,9 @@ Notes:
 - An `Extern<T>` from the same concrete runtime goes through `evalTree`: an evaluated
   payload is projected without a copy, and an unevaluated node is evaluated first.
   An `Extern` belonging to another ArkTSRuntime specialization does not match this branch.
-- A Cangjie callback of type `(Extern<T>) -> Extern<T>` becomes a JS function. On
-  invocation, all JS arguments are collected into one array and passed to the callback as
-  an evaluated `Extern<T>`.
-- `Int64` becomes a big int.
-- Supported arrays are arrays of `Int64`, `Float64`, `Bool`,
-  `String`, or same-runtime `Extern<T>`. `arrayJSValue<E>` maps each element through
-  `toJSValue`; other array types are rejected for now.
+- `Int64` and `UInt64` become big ints.
+- `Option<U>` maps `Some` through `toJSValue` and maps `None` to `undefined`.
+- `arrayJSValue<E>` maps each supported array element through `toJSValue`.
 
 ### `toExtern`: Cangjie value → `Extern<T>`
 
@@ -624,6 +638,7 @@ public static func fromExtern<R>(e: Extern<T>): R {
                 }
                 (converted as R).getOrThrow()
             case _: Option<Extern<T>> => (retain(value) as R).getOrThrow()           // identity: no conversion
+            ...
             case _ => throw ExternConversionException(
                 "Unsupported conversion from ArkTS")
         }
@@ -631,10 +646,8 @@ public static func fromExtern<R>(e: Extern<T>): R {
 }
 ```
 
-For `Bool`, `String`, `BigInt`, and `Float64`, the matching reader is called directly.
-`Int32` and `Int64` read a JS number and narrow it. Converting to `Unit` discards the value;
-converting to `Array<String>` converts each element; and conversion to the same `Extern<T>`
-is the identity case. Other target types are rejected.
+Each target uses the corresponding `ark_interop` reader. Converting to `Unit` discards the
+value; and conversion to the same `Extern<T>` is the identity case. Other target types are rejected.
 
 ## 8. Helpers
 
