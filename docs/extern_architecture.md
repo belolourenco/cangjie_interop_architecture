@@ -507,7 +507,7 @@ Additionally the compiler should report an error if the user tries to extend the
 
 ##### Forced cast
 
-At the desugaring stage the remaining operations `(U)e` are not ambiguous anymore and can be desugared as `T.fromExtern<U>(BUILD_TREE(e))`, when `e : Extern<T>` and `T <: ForeignRuntime`. The desugaring function `BUILD_TREE` is defined below.
+At the desugaring stage the remaining operations `(U)e` are not ambiguous anymore and can be desugared as `T.fromExtern<U>(BUILD_TREE(e))`, for  `e : Extern<T>` and `T <: ForeignRuntime`. The desugaring function `BUILD_TREE` is defined below.
 
 ##### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
@@ -707,7 +707,16 @@ e.a.b(c.d, f[0]).g
 
 A naive `eval` promotes every nested access, call, and argument to a global handle (6 here). Only the result of the whole expression is visible to Cangjie, so the intermediates can stay local and be released when `eval` returns.
 
-#### Possible optimization 3: intern field names
+#### Possible optimization 3: short lifetime for values that are immediately translated into Cangjie values (needs Extern tree)
+
+```cangjie
+let name: String = (String)e.user.name
+// T.fromExtern<String>(ExternMemberAccess(ExternMemberAccess(e, "user"), "name"))
+```
+
+Because `fromExtern` receives the whole tree, it can evaluate and copy the final foreign string directly into Cangjie. Neither the intermediate object nor the final string needs to be promoted to a long-lived handle.
+
+#### Possible optimization 4: intern field names
 
 ```cangjie
 e.foo
@@ -718,7 +727,7 @@ e.foo
 
 A naive `eval` converts the Cangjie string `"foo"` into a foreign string on every access. Interning it as a reusable foreign string removes that conversion from all later accesses of the same field name.
 
-#### Possible optimization 4: cache converted strings
+#### Possible optimization 5: cache converted strings
 
 ```cangjie
 let e1: Extern<T> = "foo"
@@ -729,7 +738,7 @@ let e2: Extern<T> = "foo"
 
 A naive `toExtern` allocates and converts the same Cangjie string twice. Caching the foreign string keyed by the Cangjie value turns the second conversion into a lookup; the dual is `fromExtern<String>(e)` on the same immutable foreign string.
 
-#### Possible optimization 5: bulk conversion of aggregates
+#### Possible optimization 6: bulk conversion of aggregates
 
 ```cangjie
 let a: Extern<T> = [1, 2, 3]
@@ -738,7 +747,7 @@ let a: Extern<T> = [1, 2, 3]
 
 A naive `toExtern` builds the foreign array one element at a time. Copying the buffer in one go costs a single FFI call for the whole array; the dual is `(Array<Int64>)a` in `fromExtern`.
 
-#### Possible optimization 6: send the whole tree in one FFI call (needs Extern tree)
+#### Possible optimization 7: send the whole tree in one FFI call (needs Extern tree)
 
 ```cangjie
 e.a.b(c.d, f[0]).g
