@@ -400,7 +400,7 @@ public enum Extern<T> where T <: ForeignRuntime<T> {
 
 The `Extern<T>` constructors above are said to be the primitive `Extern` constructors.
 
-Even though we define `Extern<T>` as being non-exhaustive we require new constructors to be derived from the others. The `evalDerived` function is intended to implement how new constructors should be evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Compiler Optimizations](#compiler-optimizations).
+Even though we define `Extern<T>` as being non-exhaustive we require new constructors to be derived from the others. The `evalDerived` function is intended to implement how new constructors should be evaluated in terms of the primitive constructors. Adding a new constructor to `Extern<T>`, requires adding support for it in `evalDerived`. Example is shown in [Compiler Optimizations](#42-compiler-optimizations-needs-extern-tree-and-externseq).
 
 #### `ForeignRuntime<T>` interface
 
@@ -751,8 +751,7 @@ e.a.b(c.d, f[0]).g
 
 A naive `eval` crosses the FFI boundary once per constructor (6 times here), and optimization 1 fuses only pure member paths. Encoding the tree and evaluating it on the C / VM side handles a mixed member / index / call expression in a single crossing.
 
-
-### 4.2. Compiler Optimizations <span id="compiler-optimizations"></span>
+### 4.2. Compiler Optimizations (needs Extern tree and ExternSeq) <span id="42-compiler-optimizations-needs-extern-tree-and-externseq"></span>
 
 The current implementation allows for compiler optimizations to be added without breaking backward compatibility. We propose the following:
 
