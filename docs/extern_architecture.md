@@ -8,15 +8,15 @@
 # Changes/fixes since last architecture meeting (10/09/2026)
 
 
-- Removed section about `T.fromExtern<R>(T.eval(t))` to `T.fromExtern<T>(t)` optimization. Desugaring directly creates `T.fromExtern<T>(t)` from `(T)...`.
+- Removed section about `T.fromExtern<R>(T.eval(t))` to `T.fromExtern<T>(t)` optimization. The desugaring of `(T)expr` is `T.fromExtern<T>(expr)`.
 
-- ExternCompoundAssignment is now part of Extern enum
+- `ExternCompoundAssignment` is now part of Extern enum. Before there was a dedicated section about different alternatives to deal with `ExternCompoundAssignment`.
 
-- `evalDerived` moved into `Extern` enum
+- `evalDerived` is now a static method of `Extern` enum so that the user cannot override it. Before it was a static method of `ForeignRuntime`.
 
 - Added more details on the [Position in the system section](#position-in-the-system), mostly on the table. This includes where the desugaring occurs.
 
-- [Section Compiler Changes](#32-compiler-changes) divided in three sections: tarsing, type checking rules, desugaring after SEMA.
+- [Section Compiler Changes](#32-compiler-changes) divided in three sections: parsing, type checking rules, desugaring after SEMA.
 
 
 ---
