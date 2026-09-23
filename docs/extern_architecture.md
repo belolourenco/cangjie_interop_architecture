@@ -329,7 +329,7 @@ No changes in the compiler backend or any specific OS-specific features.
 
 ### ABI/API compatibility
 
-- **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, seven exception classes — additive, no breaking change to existing APIs.
+- **New std.core API:** `Extern<T>`, `ForeignRuntime<T>`, exception classes — additive, no breaking change to existing APIs.
 - **New syntax:** Forced cast `(U)e` — purely additive.
 - **ABI:** `Extern<T>` is a `non-exhaustive enum`; adding constructors at the end of an `non-exhaustive enum` doesn't break API/ABI compatibility.
 - **Backward compatibility:** Full compatible, including `ohos.ark_interop` code continues to work; migration is opt-in.
@@ -438,7 +438,7 @@ Implementers of `ForeignRuntime<T>` are requested to handle `ExternPayload`, `Ex
 2. `static func toExtern<R>(v: R): Extern<T>`
     - must throw `ExternConversionException` if a conversion exception occurs.
 3. `static func eval(t: Extern<T>): Extern<T>`
-    - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, and `ExternFunctionCall`.
+    - must handle the `Extern` primitive constructors: `ExternPayload`, `ExternMemberAccess`, `ExternIndexedAccess`, `ExternMemberUpdate`, `ExternIndexedUpdate`, `ExternFunctionCall`, and `ExternCompoundAssignment`.
     - must call `Extern<T>.evalDerived(t)` in the default case.
     - must throw `ExternMemberAccessException`, `ExternFunctionAccessException`, `ExternFunctionCallException`, `ExternIndexedAccessException`, `ExternCompoundAssignmentException` if the respective dynamic operation fails.
     - must throw `ForeignRuntimeException` if the execution in the external runtime throws an exception.
@@ -908,4 +908,4 @@ The `Extern<T>` feature introduces a language-level interoperability mechanism t
 3. Provides precise, typed exceptions for foreign operation failures.
 4. Generalizes beyond ArkTS to any foreign runtime.
 
-The compiler implementation ([Git code PR #1871](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)) adds forced cast parsing, `DesugarExtern.cpp`, and Sema support. The standard library adds `Extern<T>`, `ForeignRuntime<T>`, and seven exception classes to `std.core`. CI validation has passed.
+The compiler implementation ([Git code PR #1871](https://gitcode.com/Cangjie/cangjie_compiler/merge_requests/1871)) adds forced cast parsing, `DesugarExtern.cpp`, and Sema support. The standard library adds `Extern<T>`, `ForeignRuntime<T>`, and exception classes to `std.core`. CI validation has passed.
