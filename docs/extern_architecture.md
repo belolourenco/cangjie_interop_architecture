@@ -614,10 +614,10 @@ Example 4:
 For `e1, e2: Extern<T>`.
 
 ```cangjie
-DESUGAR(e1.items[e2.value]) =
+DESUGAR(e1.a[e2.b]) =
     T.eval( ExternIndexedAccess(
-                ExternMemberAccess(e1, "items"),
-                ExternMemberAccess(e2, "value")
+                ExternMemberAccess(e1, "a"),
+                ExternMemberAccess(e2, "b")
             )
     )
 ```
@@ -627,11 +627,11 @@ Example 5:
 For `e1, e2, e3: Extern<T>`.
 
 ```cangjie
-DESUGAR(e1.items[e2.value] = e3.result) =
+DESUGAR(e1.a[e2.b] = e3.c) =
     T.eval( ExternIndexedUpdate(
-                ExternMemberAccess(e1, "items"),
-                ExternMemberAccess(e2, "value"),
-                ExternMemberAccess(e3, "result")
+                ExternMemberAccess(e1, "a"),
+                ExternMemberAccess(e2, "b"),
+                ExternMemberAccess(e3, "c")
             )
     )
 ```
@@ -641,11 +641,11 @@ Example 6:
 For `e1, e2, e3: Extern<T>`.
 
 ```cangjie
-DESUGAR(e1.items[e2].x -= e3.result) =
+DESUGAR(e1.a[e2].b -= e3.c) =
     T.eval( ExternCompoundAssignment(
-                ExternMemberAccess(ExternIndexedAccess(ExternMemberAccess(e1, "items"), x), "x"),
+                ExternMemberAccess(ExternIndexedAccess(ExternMemberAccess(e1, "a"), e2), "b"),
                 "-",
-                ExternMemberAccess(e3, "result")
+                ExternMemberAccess(e3, "c")
             )
     )
 ```
@@ -655,10 +655,10 @@ Example 7:
 For `e1, e2, e3: Extern<T>`, `n: Int64`.
 
 ```cangjie
-DESUGAR(e1.api.run(e2.value, e3[0], n + 1)) =
+DESUGAR(e1.a.b(e2.c, e3[0], n + 1)) =
     T.eval( ExternFunctionCall(
-                ExternMemberAccess(ExternMemberAccess(e1, "api"), "run"),
-                [ ExternMemberAccess(e2, "value"), 
+                ExternMemberAccess(ExternMemberAccess(e1, "a"), "b"),
+                [ ExternMemberAccess(e2, "c"), 
                   ExternIndexedAccess(e3, 0),
                   n + 1
                 ]
@@ -712,8 +712,8 @@ A naive `eval` promotes every nested access, call, and argument to a global hand
 #### Possible optimization 3: short lifetime for values that are immediately translated into Cangjie values (needs Extern tree)
 
 ```cangjie
-let name: String = (String)e.user.name
-// T.fromExtern<String>(ExternMemberAccess(ExternMemberAccess(e, "user"), "name"))
+let s: String = (String)e.a.b
+// T.fromExtern<String>(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"))
 ```
 
 Because `fromExtern` receives the whole tree, it can evaluate and copy the final foreign string directly into Cangjie. Neither the intermediate object nor the final string needs to be promoted to a long-lived handle.
