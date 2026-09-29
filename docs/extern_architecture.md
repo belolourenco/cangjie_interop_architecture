@@ -944,7 +944,9 @@ Sema only accepts these expressions and gives them their types. The rewrites hap
 
 #### 5.3.1. `Extern` cannot be extended
 
-`CheckExtendedTypeValidity` in [TypeCheckExtend.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExtend.cpp) reports `sema_illegal_extended_type` for `extend Extern<T>`, including through a type alias.
+Extending `Extern` should result in a type error.
+
+`CheckExtendedTypeValidity` in [TypeCheckExtend.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExtend.cpp) should report `sema_illegal_extended_type` for `extend Extern<T>`, including through a type alias.
 
 #### 5.3.2. Implicit conversions
 
@@ -997,40 +999,34 @@ A dynamic node is typed `Extern<T>`, the type of its receiver.
 | `e.f = v`, `e[idx] = v` | `SynAssignExpr` in [AssignExpr.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExpr/AssignExpr.cpp), before operator overloading | if `e : Extern<T>` then `ty = Extern<T>`; `v`, `idx` of any type |
 | `e.f op= v`, `e[i] op= v` | same as the update | `ty = Extern<T>` |
 
-synthesize `e.f` in pseudocode:
+The changes to these functions in pseudocode:
 
-```text
-synthesize e
-if IsDynamicExternMemberAccess(ma):    // e is an Extern<T> value, e.f is not a left value
-    ma.ty = e.ty                       // no member lookup, no target
-```
-
-synthesize `e[idx]` in pseudocode:
-
-```text
-synthesize e and the index             // already done for every subscript
-if IsDynamicExternSubscript(se):       // before the rewrite into e.[](idx)
-    se.ty = e.ty
-```
-
-synthesize `e(args)`, `e.f(args)` in pseudocode:
-
-```text
-synthesize the callee e                // a dynamic callee e.f is accepted as it is
-if IsDynamicExternCall(ce):            // before candidate lookup
-    report named and inout arguments
-    synthesize the arguments without a target
-    ce.ty = e.ty
-```
-
-synthesize `e.f = v`, `e[idx] = v` in pseudocode:
-
-```text
-if ae.leftValue is e.f or e[idx]:
+```cpp
+InferMemberAccess(ma):                     // ma is e.f
     synthesize e
-    if IsDynamicExternUpdate(ae):
-        synthesize the index and v without a target
-        ae.leftValue.ty = ae.ty = e.ty
+    if IsDynamicExternMemberAccess(ma):    // e is an Extern<T> value, e.f is not a left value
+        ma.ty = e.ty                       // no member lookup, no target
+
+ChkSubscriptExpr(se):                      // se is e[idx]
+    synthesize e and the index             // already done for every subscript
+    if IsDynamicExternSubscript(se):       // before the rewrite into e.[](idx)
+        ChkExternSubscript(se):
+            se.ty = e.ty
+
+ChkCallExpr(ce):                           // ce is e(args) or e.f(args)
+    synthesize the callee e                // a dynamic callee e.f is accepted as it is
+    if IsDynamicExternCall(ce):            // before candidate lookup
+        ChkExternCall(ce):
+            report named and inout arguments
+            synthesize the arguments without a target
+            ce.ty = e.ty
+
+SynAssignExpr(ae):                         // ae is e.f = v or e[idx] = v
+    synthesize e                           // the receiver of the left value
+    if IsDynamicExternUpdate(ae):          // before operator overloading
+        SynExternUpdate(ae):
+            synthesize the index and v without a target
+            ae.leftValue.ty = ae.ty = e.ty
 ```
 
 When one of these nodes is checked against an expected type, `Extern<T>` must be a subtype of it.
@@ -1091,7 +1087,7 @@ if NeedExternConversion(U, Extern<T>):
 
 #### 5.4.3. Dynamic operations
 
-A dynamic node is one of the expressions recognized by the `IsDynamicExtern*` predicates (section 5.2) that has no `desugarExpr` yet. It becomes `T.eval(tree)`, where `tree` is a value of `Extern<T>` that describes the operation with the constructors of `Extern<T>`. A chain of dynamic nodes, such as `e.a.b(1)`, gets a single `T.eval` around the tree of the whole chain.
+A dynamic node is one of the expressions recognized by the `IsDynamicExtern*` predicates (section 5.2). It becomes `T.eval(tree)`, where `tree` is a value of `Extern<T>` that describes the operation with the constructors of `Extern<T>`. A chain of dynamic nodes, such as `e.a.b(1)`, gets a single `T.eval` around the tree of the whole chain.
 
 ##### Finding the outermost dynamic node
 
@@ -1126,21 +1122,6 @@ BuildTree(x):
         e.f = v              => ExternMemberUpdate(BuildTree(e), "f", BuildTree(v))
         e[i] = v             => ExternIndexedUpdate(BuildTree(e), BuildTree(i), BuildTree(v))
         a op= v              => ExternCompoundAssignment(<tree of the access a>, "op", BuildTree(v))   // "+" for +=
-```
-
-Parentheses around a dynamic node are dropped: `(e.a).b` is built like `e.a.b`.
-
-Examples:
-
-```cangjie
-e.a.b(1)           // T.eval(ExternFunctionCall(ExternMemberAccess(ExternMemberAccess(e, "a"), "b"), [1]))
-e[i] = v           // T.eval(ExternIndexedUpdate(e, i, v))
-obj.f().x.y += v   // T.eval(ExternCompoundAssignment(ExternMemberAccess(obj.f().x, "y"), "+", v))
-                   // obj.f().x is a Cangjie field of type Extern<T>, so it is a leaf
-g(e.a).b           // T.eval(ExternMemberAccess(g(T.eval(ExternMemberAccess(e, "a"))), "b"))
-                   // g returns Extern<T>; the leaf g(e.a) gets its own T.eval when the walk visits it
-e.f(x, { y: Extern<T> => y.g })
-                   // T.eval(ExternFunctionCall(ExternMemberAccess(e, "f"), [x, { y => T.eval(ExternMemberAccess(y, "g")) }]))
 ```
 
 #### 5.4.4. The generated calls
