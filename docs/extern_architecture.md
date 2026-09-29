@@ -237,7 +237,7 @@ func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
 
 Compilation stages according to [cangjie_compiler/src/Frontend/CompilerInstance.cpp](https://gitcode.com/Cangjie/cangjie_compiler/blob/main/src/Frontend/CompilerInstance.cpp).
 
-This document is mostly about the boxes in red. More detailed information about the implementation can be found in [4. Detailed Implementation Details](#5-detailed-implementation-plan).
+This document is mostly about the boxes in red. More detailed information about the implementation can be found in [5. Detailed Implementation Details](#5-detailed-implementation-plan).
 
 ```mermaid
 flowchart TB
