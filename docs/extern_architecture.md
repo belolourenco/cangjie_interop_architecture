@@ -938,7 +938,7 @@ Sema only accepts these expressions and gives them their types. The rewrites hap
   // ae assigns to a member or to an index of an Extern<T> value e:
   // e.f = v, e[i] = v, e.f op= v, e[i] op= v
   bool IsDynamicExternUpdate(const AssignExpr& ae);
-```
+  ```
 
 ### 5.3. Type checking
 
