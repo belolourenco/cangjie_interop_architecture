@@ -924,7 +924,7 @@ Extending `Extern` should result in a type error.
 
 ##### `Check` gets an opt-in flag
 
-Function `Check` declared in [`src/Sema/TypeChecker.cpp`](`https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp`) is modified to receive an extra argument: `allowToExternConv`. This indicates whether an implicit extern conversion is allowed to be inserted.
+Function `Check` declared in [`src/Sema/TypeChecker.cpp`](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) is modified to receive an extra argument: `allowToExternConv`. This indicates whether an implicit extern conversion is allowed to be inserted.
 
 ```cpp
 bool Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool allowToExternConv = false);
