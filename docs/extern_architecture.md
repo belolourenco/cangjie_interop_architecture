@@ -237,7 +237,7 @@ func testCJ(vm: Extern<T>): Unit where T <: ForeignRuntime<T> {
 
 Compilation stages according to [cangjie_compiler/src/Frontend/CompilerInstance.cpp](https://gitcode.com/Cangjie/cangjie_compiler/blob/main/src/Frontend/CompilerInstance.cpp).
 
-This document is mostly about the boxes in red.
+This document is mostly about the boxes in red. More detailed information about the implementation can be found in [4. Detailed Implementation Details](#5-detailed-implementation-plan).
 
 ```mermaid
 flowchart TB
@@ -320,8 +320,8 @@ flowchart TB
 | `cangjie_runtime` - std.ast | (2) New `ForcedCastExpr <: Expr` class. Class declaration, flatbuffers serialization. |
 | `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to SEMA. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
-| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2](#322-type-checking-rules). |
-| `cangjie_compiler` - Desugar After Sema | (6) Additional pass before the existing ones to desugar annotated Extern expressions. Desugaring rules in section [3.2.3](#323-desugaring-after-sema). |
+| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2. Type Checking Rules](#322-type-checking-rules). Implementation details in [5.3. Type Checking](#53-type-checking). |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3. Desugaring after sema](#323-desugaring-after-sema).  Implementation details in [5.4. Desugaring](#54-desugaring). |
 | `cangjie_compiler` - CHIR | (7) Extern optimizations. Example in section [4.2](#42-compiler-optimizations). |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
