@@ -320,8 +320,8 @@ flowchart TB
 | `cangjie_runtime` - std.ast | (2) New `ForcedCastExpr <: Expr` class. Class declaration, flatbuffers serialization. |
 | `cangjie_compiler` - Parser | (3) Parse forced cast `(U)e` expressions as `ForcedCastExpr`. Note, that at this point we still don't know if we have a forced cast or a call expression of the form `(f)(x)` - this decision is postponed to SEMA. |
 | `cangjie_compiler` - Macro Expand | (4) Add support for new ForcedCastExpr expressions, including flatbuffers serialization. |
-| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2. Type Checking Rules](#322-type-checking-rules). Implementation details in [5.3. Type Checking](#53-type-checking). |
-| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3. Desugaring after sema](#323-desugaring-after-sema).  Implementation details in [5.4. Desugaring](#54-desugaring). |
+| `cangjie_compiler` - Sema | (5) Type checking of Extern expressions and annotate Extern expression that need desugaring. Typing rules in section [3.2.2. Type Checking Rules](#322-type-checking-rules). Implementation details in [5.1. Type Checking](#51-type-checking). |
+| `cangjie_compiler` - Desugar After Sema | (6) Additional pass to desugar annotated Extern expressions. Desugaring rules in section [3.2.3. Desugaring after sema](#323-desugaring-after-sema).  Implementation details in [5.2. Desugaring](#52-desugaring). |
 | `cangjie_compiler` - CHIR | (7) Extern optimizations. Example in section [4.2](#42-compiler-optimizations). |
 | `cangjie_tools` | Consequence of (1). Some LSP tests golden files need to be updated because of additional new public declarations in std.core. |
 
@@ -912,43 +912,15 @@ The compiler introduces two rewrites:
 
 Sema only accepts these expressions and gives them their types. The rewrites happen in one pass after Sema, driven by the final types.
 
-### 5.2. Helpers
+### 5.1. Type checking
 
-- `Ty::IsCoreExternType()` in [Types.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/include/cangjie/AST/Types.h) / [Types.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/AST/Types.cpp): an enum of the core package named `Extern` with one type argument. It uses the new constants `STD_LIB_EXTERN` and `STD_LIB_FOREIGN_RUNTIME` from [ConstantsUtils.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/include/cangjie/Utils/ConstantsUtils.h).
-
-- `NeedExternConversion(from, to)` in [TypeCheckerImpl.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckerImpl.h) / [TypeChecker.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp), shared by Sema and the desugaring:
-  ```cpp
-  // `to` is `Extern<T>`, `from` is a valid type, not `Nothing`, and not the same as `to`
-  bool NeedExternConversion(Ty& from, Ty& to);
-  ```
-- Dynamic-node predicates in [TypeCheckUtil.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckUtil.h) / [TypeCheckUtil.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckUtil.cpp), shared by Sema and the desugaring:
-  ```cpp
-  // e is a value of type Extern<T>, not the type name Extern<T> itself
-  // (so Extern<T>.ExternPayload(v) is a normal enum constructor call, not a dynamic access)
-  bool IsExternValue(const Expr& e);
-
-  // ma is a read of any member f of an Extern<T> value e: e.f
-  // (a left value e.f in e.f = v is handled by IsDynamicExternUpdate)
-  bool IsDynamicExternMemberAccess(const MemberAccess& ma);
-
-  // se is a read of an index of any type on an Extern<T> value e: e[i]
-  // (a left value e[i] in e[i] = v is handled by IsDynamicExternUpdate)
-  bool IsDynamicExternSubscript(const SubscriptExpr& se);
-
-  // ae assigns to a member or to an index of an Extern<T> value e:
-  // e.f = v, e[i] = v, e.f op= v, e[i] op= v
-  bool IsDynamicExternUpdate(const AssignExpr& ae);
-  ```
-
-### 5.3. Type checking
-
-#### 5.3.1. `Extern` cannot be extended
+#### 5.1.1. `Extern` cannot be extended
 
 Extending `Extern` should result in a type error.
 
 `CheckExtendedTypeValidity` in [TypeCheckExtend.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExtend.cpp) should report `sema_illegal_extended_type` for `extend Extern<T>`, including through a type alias.
 
-#### 5.3.2. Implicit conversions
+#### 5.1.2. Implicit conversions
 
 ##### `Check` gets an opt-in flag
 
@@ -987,7 +959,7 @@ In [TypeCheckCall.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_e
 
 Candidates that need no conversion are preferred. Among the remaining candidates the usual most-specific rule applies, and an ambiguity is an error.
 
-#### 5.3.3. Dynamic operations
+#### 5.1.3. Dynamic operations
 
 A dynamic node is typed `Extern<T>`, the type of its receiver.
 
@@ -1035,9 +1007,9 @@ No other change is needed for:
 - **`++` and `--`,** which stay errors: they need an integer type.
 - **A multiple assignment `(e.x, b) = (1, 2)`,** which becomes one dynamic update per element.
 
-### 5.4. Desugaring
+### 5.2. Desugaring
 
-#### 5.4.1. The pass
+#### 5.2.1. The pass
 
 New file [ExternDesugaring.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/Desugar/AfterTypeCheck/ExternDesugaring.cpp):
 
@@ -1066,7 +1038,7 @@ for (auto& pkg : pkgs) {
 | 3 | `DesugarExtern` **(new)** | `let e: Extern<RT> = 1` | `let e: Extern<RT> = RT.toExtern<Int64>(1)` |
 | 4 | `AutoBoxing::AddOptionBox` | `let o: ?Int64 = 1` | `let o: ?Int64 = Some(1)` |
 
-#### 5.4.2. Implicit conversions
+#### 5.2.2. Implicit conversions
 
 The pass converts a value `e: U` wherever `Extern<T>` is expected in the following cases:
 
@@ -1084,9 +1056,9 @@ if NeedExternConversion(U, Extern<T>):
     e.ty          = Extern<T>
 ```
 
-#### 5.4.3. Dynamic operations
+#### 5.2.3. Dynamic operations
 
-A dynamic node is one of the expressions recognized by the `IsDynamicExtern*` predicates (section 5.2). It becomes `T.eval(tree)`, where `tree` is a value of `Extern<T>` that describes the operation with the constructors of `Extern<T>`. A chain of dynamic nodes, such as `e.a.b(1)`, gets a single `T.eval` around the tree of the whole chain.
+A dynamic node is one of the expressions recognized by the `IsDynamicExtern*` predicates (section 5.3). It becomes `T.eval(tree)`, where `tree` is a value of `Extern<T>` that describes the operation with the constructors of `Extern<T>`. A chain of dynamic nodes, such as `e.a.b(1)`, gets a single `T.eval` around the tree of the whole chain.
 
 ##### Finding the outermost dynamic node
 
@@ -1123,7 +1095,7 @@ BuildTree(x):
         a op= v              => ExternCompoundAssignment(<tree of the access a>, "op", BuildTree(v))   // "+" for +=
 ```
 
-#### 5.4.4. The generated calls
+#### 5.2.4. The generated calls
 
 The pass creates fully typed ASTs, which are not type checked again. The calls, their callees and the `Array` literal are marked `IMPLICIT_ADD`. The created nodes take the source position of the node they replace.
 
@@ -1169,6 +1141,34 @@ The arguments of each constructor:
 | `ExternCompoundAssignment` | the constructor call for the access `e.f` or `e[i]`; the operator without `=` as a `String` literal (`"+"` for `+=`); `BuildTree(v)` |
 
 `BuildTree(x)` is a nested constructor call of type `Extern<T>` only when `x` is dynamic. Otherwise it is a clone of `x`, with its own type, even where the parameter is `Any`.
+
+### 5.3. Helpers
+
+- `Ty::IsCoreExternType()` in [Types.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/include/cangjie/AST/Types.h) / [Types.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/AST/Types.cpp): an enum of the core package named `Extern` with one type argument. It uses the new constants `STD_LIB_EXTERN` and `STD_LIB_FOREIGN_RUNTIME` from [ConstantsUtils.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/include/cangjie/Utils/ConstantsUtils.h).
+
+- `NeedExternConversion(from, to)` in [TypeCheckerImpl.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckerImpl.h) / [TypeChecker.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp), shared by Sema and the desugaring:
+  ```cpp
+  // `to` is `Extern<T>`, `from` is a valid type, not `Nothing`, and not the same as `to`
+  bool NeedExternConversion(Ty& from, Ty& to);
+  ```
+- Dynamic-node predicates in [TypeCheckUtil.h](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckUtil.h) / [TypeCheckUtil.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckUtil.cpp), shared by Sema and the desugaring:
+  ```cpp
+  // e is a value of type Extern<T>, not the type name Extern<T> itself
+  // (so Extern<T>.ExternPayload(v) is a normal enum constructor call, not a dynamic access)
+  bool IsExternValue(const Expr& e);
+
+  // ma is a read of any member f of an Extern<T> value e: e.f
+  // (a left value e.f in e.f = v is handled by IsDynamicExternUpdate)
+  bool IsDynamicExternMemberAccess(const MemberAccess& ma);
+
+  // se is a read of an index of any type on an Extern<T> value e: e[i]
+  // (a left value e[i] in e[i] = v is handled by IsDynamicExternUpdate)
+  bool IsDynamicExternSubscript(const SubscriptExpr& se);
+
+  // ae assigns to a member or to an index of an Extern<T> value e:
+  // e.f = v, e[i] = v, e.f op= v, e[i] op= v
+  bool IsDynamicExternUpdate(const AssignExpr& ae);
+  ```
 
 ---
 
