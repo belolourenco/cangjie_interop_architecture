@@ -511,7 +511,9 @@ At the desugaring stage the remaining operations `(U)e` are not ambiguous anymor
 
 ##### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
-When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function) we desugar it into `T.toExtern<U>(cjexp)`.
+When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function; (6) default parameter value; (7) element of an array or tuple literal, when the expected type of that element is `Extern<T>`; (8) branch of an `if`/`match`/`try`), we desugar it into `T.toExtern<U>(cjexp)`. Cases (7) and (8) apply only when the literal or the `if`/`match`/`try` is itself in one of these contexts, e.g. `let a: Array<Extern<R>> = [1, "a"]` or `let x: Extern<R> = if (c) { 1 } else { "a" }`. The elements and branches can be any expression, not only literals: `let a: Array<Extern<R>> = [x, x + 1, f()]` converts each of the three elements.
+
+Whether the elements of a literal are converted depends on the expected type of the literal. With `Array<Extern<R>>` each element is converted. With `Extern<R>` the whole literal is converted: `let a: Extern<R> = [x, 12]`, with `x: Int64`, is desugared into `R.toExtern<Array<Int64>>([x, 12])`.
 
 **Example 1**:
 Assume `cjexp` has type `U` with `U != Extern<T>`. Then:
@@ -530,6 +532,40 @@ is desugared into
 ```cangjie
 func foo(..., x: Extern<R>, ...) {...}
 foo(..., R.toExtern<Int64>(42), ...)
+```
+
+**Example 3**:
+
+```cangjie
+let a1: Array<Extern<R>> = [1, "a"]
+
+let x: Int64 = 42
+let a2: Array<Extern<R>> = [x, 12]
+
+let b: Extern<R> = [x, 12]
+```
+
+is desugared into
+
+```cangjie
+let a: Array<Extern<R>> = [R.toExtern<Int64>(1), R.toExtern<String>("a")]
+
+let x: Int64 = 42
+let a2: Array<Extern<R>> = [R.toExtern<Int64>(x), R.toExtern<Int64>(12)]
+
+let b: Extern<R> = R.toExtern<Array<Int64>>([x, 12])
+```
+
+**Example 4**
+
+```cangjie
+let x: Extern<R> = if (c) { 1 } else { "a" }
+```
+
+is desugared into
+
+```cangjie
+let x: Extern<R> = if (c) { R.toExtern<Int64>(1) } else { R.toExtern<String>("a") }
 ```
 
 ##### Dynamic Extern expression desugaring
@@ -922,36 +958,34 @@ Extending `Extern` should result in a type error.
 
 #### 5.1.2. Implicit conversions
 
-##### `Check` gets an opt-in flag
+##### Conversion in `Check`
 
-Function `Check` declared in [`src/Sema/TypeChecker.cpp`](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) is modified to receive an extra argument: `allowToExternConv`. This indicates whether an implicit extern conversion is allowed to be inserted.
-
-```cpp
-bool Check(ASTContext& ctx, Ptr<Ty> target, Ptr<Node> node, bool allowToExternConv = false);
-```
+Function `Check` in [`src/Sema/TypeChecker.cpp`](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) accepts an expression of any type when the target is `Extern<T>`:
 
 ```text
-if allowToExternConv and target is Extern<T> and node is an Expr that is not Extern<T>:
+if target is Extern<T> and node is an Expr and !PassesTargetToValues(node):
     synthesize node without a target
     succeed if the resulting type is a valid type
 else:
     check as before
 ```
 
-##### Positions that pass `allowToExternConv = true`
+So the conversion applies wherever an expression is checked against `Extern<T>`: variable initializers, assignments, call arguments, `return`, function and lambda bodies, and default parameter values.
 
-| Position | Function | File |
-|---|---|---|
-| Variable initializer, including member variables | `SynchronizeTypeAndInitializer` | [TypeCheckDecl.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckDecl.cpp) |
-| Assignment right-hand side | `SynAssignExpr` | [AssignExpr.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExpr/AssignExpr.cpp) |
-| Call argument | `ChkFuncArg` | [TypeChecker.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) |
-| `return` argument | `SynReturnExpr` | [ReturnExpr.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeCheckExpr/ReturnExpr.cpp) |
-| Function body: functions, lambdas, property getters | `CheckBodyRetType` | [TypeChecker.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) |
+`PassesTargetToValues(node)` (file-local in `TypeChecker.cpp`) is true for the nodes that check the expressions giving their value against their own target: `if`, `match`, `try`, blocks and parenthesized expressions. These are checked as usual, so the target `Extern<T>` reaches their values instead of converting the whole node. A value of type `Unit` that doesn't come from a branch is therefore an error, as it is for any other target: an `if` without `else`, a `try` with resources, and a block ending with a declaration.
 
-Everything else keeps the normal check against `Extern<T>`, so these are errors:
-- default parameter values;
-- array and tuple literal elements;
-- individual `if`/`match`/`try` branches. The whole expression can still be converted when it is itself in an allowed position.
+For a `try` with effect handlers, the try block and the handlers are lambdas checked against `() -> Extern<T>` and `(Cmd) -> Extern<T>`, so their values are converted like function bodies. `CreateSetHandler` in [EffectHandlers.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/Desugar/AfterTypeCheck/EffectHandlers.cpp) wraps a handler's value in a `try` and synthesizes its type; when the handled `try` has type `Extern<T>`, it gives that wrapper `Extern<T>` instead, as `EncloseTryLambda` does for the try block, so that `HandleValues` converts the value.
+
+| Example with expected type | Where is the implicit conversion applied? |
+|---|---|
+| `if (c) {1} else {"a"}` where `Extern<RT>` is expected | on each branch |
+| `if (c) {e} else {"a"}` where `Extern<RT>` is expected, with `e: Extern<RT>` | on the else branch, on `"a"` |
+| `if (c) {1}` where `Extern<RT>` is expected (no else) | type error: the `if` has type `Unit` |
+| `try {perform Stop(); 1} handle (_: Stop) {"h"}` for `Extern<RT>` is expected | on the last expression of the try body and the last expression of the handler |
+| `[1, 2]` where `Extern<RT>` is expected | the whole literal |
+| `[1, "a"]` where `Array<Extern<RT>>` is expected | on each element of the array |
+| `(1, 2)` where `(Extern<RT>, Int64)` is expected | on the first component |
+| `func foo(x!: Array<Extern<RT>> = [1])` | the element of the default value |
 
 ##### Overload ranking
 
@@ -1049,10 +1083,13 @@ The pass converts a value `e: U` wherever `Extern<T>` is expected in the followi
 | `CallExpr` | each argument | the matching parameter type of `baseFunc` | `f(1)` with `func f(p: Extern<RT>)` | `f(RT.toExtern<Int64>(1))` |
 | `ReturnExpr` | `expr` | return type of the enclosing function | `return true` in `func g(): Extern<RT>` | `return RT.toExtern<Bool>(true)` |
 | `FuncBody` | last expression of `body` | return type | `func g(): Extern<RT> { 1 }` | `func g(): Extern<RT> { RT.toExtern<Int64>(1) }` |
+| `ArrayLit` of type `Array<E>` | each element | `E` | `let arr: Array<Extern<RT>> = [1, "a"]` | `let arr: Array<Extern<RT>> = [RT.toExtern<Int64>(1), RT.toExtern<String>("a")]` |
+| `TupleLit` of type `(E1, ..., En)` | each component | `Ei` | `let tpl: (Extern<RT>, Int64) = (1, 2)` | `let tpl: (Extern<RT>, Int64) = (RT.toExtern<Int64>(1), 2)` |
+| `IfExpr`, `MatchExpr`, `TryExpr` | last expression of each branch | the type of the node | `if (c) {1} else {"a"}` | `if (c) {RT.toExtern<Int64>(1)} else {RT.toExtern<String>("a")}` |
 
 ```text
 if NeedExternConversion(U, Extern<T>):
-    e.desugarExpr = T.toExtern<U>(e.desugarExpr /* or a clone of e */)
+    e.desugarExpr = T.toExtern<U>(e.desugarExpr /* or a clone of e if e.desugarExpr == nullptr*/)
     e.ty          = Extern<T>
 ```
 
