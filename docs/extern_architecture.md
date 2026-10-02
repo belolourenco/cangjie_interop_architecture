@@ -492,16 +492,100 @@ A preliminary implementation can be found
 
 #### 3.2.2 Type checking rules
 
-The following rules needs to be incorporated in the SEMA stage.
+##### Forced cast
 
-| Expression | Rule |
-| --- | --- |
-| `(U)e` | Succeeds if `e: Extern<T>` and `U` is a type. If `U` is a valid expression and `e` is of the form `(...)` then fallback into normal workflow. |
-| `e` where `Extern<T>` expected | Always succeeds; either `e` is already `Extern<T>` or it is desugared into `T.toExtern<U>(e)` if `e: U` and `U != Extern<T>` |
-| `e.f`, `e[i]`, `e(a1, ..., an)` when `e: Extern<T>` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `a1, ..., an` need to be valid expressions of any type. |
-| `e.f = v`, `e[i] = v`, `e op= v` when `e: Extern<T>`, `op` is one of `**, *, /, %, +, -, <<, >>, &, ^, \|, &&, \|\|` | Result type is `Extern<T>`; `f` has to be a valid identifier - no further checks; `i` and `v` need to be valid expressions of any type. |
+| Condition for `(U)e` | Rule |
+|---|---|
+| `U` resolves to a type and `e: Extern<T>` with `T <: ForeignRuntime<T>` | Accept; result type is `U`. |
+| `U` resolves to a function and `e` is a parenthesized argument list | Check as an ordinary function call. |
+| Neither reading succeeds | Type error. |
 
-Additionally the compiler should report an error if the user tries to extend the `Extern` type.
+Examples, with `e: Extern<R>` and `f` a function:
+
+```cangjie
+(Int64)e    // forced cast; type Int64
+(f)(e)      // ordinary function call
+(Int64)1    // type error: operand is not Extern
+```
+
+##### Cannot extend `Extern`
+
+An extension targeting `Extern<T>` is a type error, including through a type alias.
+
+Examples:
+
+```cangjie
+extend<T> Extern<T> where T <: ForeignRuntime<T> {}
+
+type ForeignValue<T> = Extern<T>
+extend<T> ForeignValue<T> where T <: ForeignRuntime<T> {}
+```
+
+Both extensions report:
+
+```bash
+error: extending type 'Enum-Extern<Generics-T>' is not allowed
+```
+
+##### Implicit conversion
+
+When `Extern<T>` is expected in a context that allows implicit conversion (listed below), accept a well-typed expression `exp: U` and retain `U` for later desugaring into `T.toExtern<U>(exp)`, if needed. Values that are already of type `Extern<T>` need no conversion.
+
+| Context | Rule | Example |
+|---|---|---|
+| Initializer | declared type | `let x: Extern<T> = exp` |
+| Assignment | type of the left-hand side variable | `x = exp` |
+| Call argument | parameter type | `f(exp)` |
+| Return | return type of the function | `return exp` |
+| Function or lambda body | return type, for the last expression | `func f(): Extern<T> { exp }` |
+| Default parameter value | parameter type | `func f(p!: Extern<T> = exp) {}` |
+| Array or tuple literal element | element type of the literal | `let arr: Array<Extern<T>> = [exp1, exp2]`, `let tpl: (Extern<T>, Int64) = (exp, 1)` |
+| Branch of `if`, `match` or `try`, including `catch` and effect handlers | expected type of the `if`, `match` or `try` | `let x: Extern<T> = if (c) { exp1 } else { exp2 }` |
+| Body of `synchronized` | expected type of the `synchronized` | `let x: Extern<T> = synchronized (m) { exp }` |
+
+The last three rows apply recursively, e.g. `[[1]]` is accepted as `Array<Array<Extern<T>>>`. Expressions made of blocks of code, i.e. blocks, parenthesized expressions, `if`, `match`, `try`, `synchronized` and loops, are never converted as a whole: only the values they produce are. So loops, an `if` without `else`, a `try` with resources and a block ending with a declaration, whose type is `Unit`, are type errors as for any other expected type. Other expressions, including literals, lambdas and `spawn`, are converted as a whole when they are themselves expected to be `Extern<T>`.
+
+In overload resolution, a candidate that needs no conversion of its arguments is preferred.
+
+Examples, with `x: Int64`:
+
+```cangjie
+let a: Extern<R> = x                         // R.toExtern<Int64>(x)
+let b: Array<Extern<R>> = [x, "s"]           // each element converted
+let c: Extern<R> = [x, 12]                   // whole literal: R.toExtern<Array<Int64>>([x, 12])
+let d: Extern<R> = if (x > 0) { 1 } else { "n" }  // each branch converted
+func g(p!: Extern<R> = 1) {}                 // default value converted
+let o: ?Extern<R> = 1                        // type error: ?Extern<R> is not Extern<R>
+let s: ?Extern<R> = Some(1)                  // type error: type argument of Some cannot be inferred
+let u: Extern<R> = if (x > 0) { 1 }          // type error: an if without else has type Unit
+let w: Extern<R> = while (x > 0) {}          // type error: a loop has type Unit
+```
+
+##### Dynamic operations
+
+For a value `e: Extern<T>`, all operations below have type `Extern<T>`. Foreign members and signatures are checked at runtime.
+
+| Operation | Rule |
+|---|---|
+| `e.f` | No static foreign-member lookup. |
+| `e[i1, ..., in]` | Indices must be well-typed expressions of any type. |
+| `e(a1, ..., an)` | Arguments must be well-typed expressions of any type; named and `inout` arguments are rejected. |
+| `e.f = v`, `e[i1, ..., in] = v` | Indices and `v` must be well-typed expressions of any type. |
+| `e.f op= v`, `e[i1, ..., in] op= v` | Same rules for compound updates. |
+
+Indices, arguments and update values do not implicitly call `toExtern`. Assignment to an `Extern<T>` variable follows ordinary assignment rules. Operators rewritten as member calls follow the dynamic-call rules; `++` and `--` require integer operands. Multiple assignment checks each update independently.
+
+Examples, with `e: Extern<R>`:
+
+```cangjie
+e.f(1, "a")              // type Extern<R>; arguments are not converted
+e[0] = "a"               // type Extern<R>; value is not converted
+e.f += 1                 // type Extern<R>
+e + 1                    // type Extern<R> through a member call
+if (e < 1) {}            // type error: condition must be Bool
+if ((Bool)(e < 1)) {}    // explicit conversion to Bool
+e++                      // type error: integer required
+```
 
 #### 3.2.3 Desugaring after SEMA
 
@@ -963,7 +1047,7 @@ Extending `Extern` should result in a type error.
 Function `Check` in [`src/Sema/TypeChecker.cpp`](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/TypeChecker.cpp) accepts an expression of any type when the target is `Extern<T>`:
 
 ```text
-if target is Extern<T> and node is an Expr and !PassesTargetToValues(node):
+if target is Extern<T> and node is an Expr and !IsControlFlowExpr(node):
     synthesize node without a target
     succeed if the resulting type is a valid type
 else:
@@ -972,7 +1056,7 @@ else:
 
 So the conversion applies wherever an expression is checked against `Extern<T>`: variable initializers, assignments, call arguments, `return`, function and lambda bodies, and default parameter values.
 
-`PassesTargetToValues(node)` (file-local in `TypeChecker.cpp`) is true for the nodes that check the expressions giving their value against their own target: `if`, `match`, `try`, blocks and parenthesized expressions. These are checked as usual, so the target `Extern<T>` reaches their values instead of converting the whole node. A value of type `Unit` that doesn't come from a branch is therefore an error, as it is for any other target: an `if` without `else`, a `try` with resources, and a block ending with a declaration.
+`IsControlFlowExpr(node)` (file-local in `TypeChecker.cpp`) is true for the nodes made of blocks of code: `if`, `match`, `try`, `synchronized`, blocks, parenthesized expressions, and loops (`Node::IsLoopExpr`). These are checked as usual. The first six check the expressions giving their value against their own target, so the target `Extern<T>` reaches those values instead of converting the whole node; `synchronized` does so through the `try` it is desugared to. Loops check their type `Unit` against the target. A value of type `Unit` that doesn't come from a branch is therefore an error, as it is for any other target: a loop, an `if` without `else`, a `try` with resources, and a block ending with a declaration.
 
 For a `try` with effect handlers, the try block and the handlers are lambdas checked against `() -> Extern<T>` and `(Cmd) -> Extern<T>`, so their values are converted like function bodies. `CreateSetHandler` in [EffectHandlers.cpp](https://github.com/CJPLUK/cangjie_compiler/blob/feature_extern_with_enum/src/Sema/Desugar/AfterTypeCheck/EffectHandlers.cpp) wraps a handler's value in a `try` and synthesizes its type; when the handled `try` has type `Extern<T>`, it gives that wrapper `Extern<T>` instead, as `EncloseTryLambda` does for the try block, so that `HandleValues` converts the value.
 
@@ -981,6 +1065,8 @@ For a `try` with effect handlers, the try block and the handlers are lambdas che
 | `if (c) {1} else {"a"}` where `Extern<RT>` is expected | on each branch |
 | `if (c) {e} else {"a"}` where `Extern<RT>` is expected, with `e: Extern<RT>` | on the else branch, on `"a"` |
 | `if (c) {1}` where `Extern<RT>` is expected (no else) | type error: the `if` has type `Unit` |
+| `while (c) {}` where `Extern<RT>` is expected | type error: the loop has type `Unit` |
+| `synchronized (m) {1}` where `Extern<RT>` is expected | on the last expression of the body |
 | `try {perform Stop(); 1} handle (_: Stop) {"h"}` for `Extern<RT>` is expected | on the last expression of the try body and the last expression of the handler |
 | `[1, 2]` where `Extern<RT>` is expected | the whole literal |
 | `[1, "a"]` where `Array<Extern<RT>>` is expected | on each element of the array |
