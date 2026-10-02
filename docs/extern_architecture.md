@@ -508,7 +508,7 @@ Examples, with `e: Extern<R>` and `f` a function:
 (Int64)1    // type error: operand is not Extern
 ```
 
-##### Cannot extend `Extern`
+##### Extensions of `Extern`
 
 An extension targeting `Extern<T>` is a type error, including through a type alias.
 
@@ -859,7 +859,6 @@ Example 8:
 For `e1: Extern<T>` and a variable `x: Extern<T>`.
 
 ```cangjie
-DESUGAR(e1[0, "k"])     = T.eval(ExternIndexedAccess(ExternIndexedAccess(e1, 0), "k"))
 DESUGAR(e1.a + 1)       = T.eval(ExternFunctionCall(ExternMemberAccess(ExternMemberAccess(e1, "a"), "+"), [1]))
 DESUGAR(-e1)            = T.eval(ExternFunctionCall(ExternMemberAccess(e1, "-"), []))
 DESUGAR(x += 1)         = x = T.eval(ExternFunctionCall(ExternMemberAccess(x, "+"), [1]))
