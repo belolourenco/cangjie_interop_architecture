@@ -547,43 +547,93 @@ The last three rows apply recursively, e.g. `[[1]]` is accepted as `Array<Array<
 
 In overload resolution, a candidate that needs no conversion of its arguments is preferred.
 
-Examples, with `x: Int64`:
+Examples of well typed expressions and type errors:
 
 ```cangjie
-let a: Extern<R> = x                         // R.toExtern<Int64>(x)
-let b: Array<Extern<R>> = [x, "s"]           // each element converted
-let c: Extern<R> = [x, 12]                   // whole literal: R.toExtern<Array<Int64>>([x, 12])
-let d: Extern<R> = if (x > 0) { 1 } else { "n" }  // each branch converted
-func g(p!: Extern<R> = 1) {}                 // default value converted
-let o: ?Extern<R> = 1                        // type error: ?Extern<R> is not Extern<R>
-let s: ?Extern<R> = Some(1)                  // type error: type argument of Some cannot be inferred
-let u: Extern<R> = if (x > 0) { 1 }          // type error: an if without else has type Unit
-let w: Extern<R> = while (x > 0) {}          // type error: a loop has type Unit
+let x: Int64 = 42
+let u: Extern<R> = ()    // OK, the unit value will be converted
+let e: Extern<R> = x     // OK, x will be converted
+
+func f(p: Extern<R>) { ... }
+func g(): Int64 { 1 }
+
+// Contexts
+var a: Extern<R> = e                              // OK, no conversion needed
+a = "s"                                           // OK, "s" will be converted
+f(x + 1)                                          // OK, x + 1 will be converted
+func h1(): Extern<R> { return 1 }                 // OK, 1 will be converted
+func h2(): Extern<R> { x }                        // OK, x will be converted
+let l: () -> Extern<R> = { => x }                 // OK, x will be converted
+func h3(p!: Extern<R> = 1) {}                     // OK, default value will be converted
+func h4(): Extern<R> { throw Exception() }        // OK, Nothing needs no conversion
+
+// Literals
+let b: Array<Extern<R>> = [x, "s"]                // OK, each element will be converted
+let t: (Extern<R>, Int64) = (x, 1)                // OK, x will be converted
+let n: Array<Array<Extern<R>>> = [[1], ["s"]]     // OK, 1 and "s" will be converted
+let c: Extern<R> = [x, 12]                        // OK, whole literal will be converted
+
+// Expressions made of blocks of code
+let d: Extern<R> = if (x > 0) { 1 } else { "n" }  // OK, each branch will be converted
+let m: Extern<R> = match (x) {                    // OK, each case will be converted
+    case 0 => "zero"
+    case _ => x
+}
+let tc: Extern<R> = try { x } catch (_: Exception) { "error" }  // OK, x and "error" will be converted
+let u: Extern<R> = if (x > 0) { 1 }               // type error: an if without else has type Unit
+let w: Extern<R> = while (x > 0) {}               // type error: a loop has type Unit
+
+// No conversion
+let ints: Array<Int64> = [3]
+let arr: Array<Extern<R>> = ints                  // type error: expected Array<Extern<R>>, found Array<Int64>
+let fn: () -> Extern<R> = g                       // type error: expected () -> Extern<R>, found () -> Int64
+let sum: Extern<R> = x + "s"                      // type error: invalid binary operator '+' on Int64 and String
+match (e) {
+    case 5 => ()                                  // type error: expected Extern<R>, found Int64
+    case _ => ()
+}
+
+// Overload resolution
+func k(p: Int64) {}
+func k(p: Extern<R>) {}
+k(1)                                              // OK, calls k(p: Int64), which needs no conversion
 ```
 
 ##### Dynamic operations
 
-For a value `e: Extern<T>`, all operations below have type `Extern<T>`. Foreign members and signatures are checked at runtime.
+For a value `e: Extern<T>`, all operations below have type `Extern<T>`.
 
 | Operation | Rule |
 |---|---|
 | `e.f` | No static foreign-member lookup. |
-| `e[i1, ..., in]` | Indices must be well-typed expressions of any type. |
+| `e[idx]` | Index must be well-typed expressions of any type. |
 | `e(a1, ..., an)` | Arguments must be well-typed expressions of any type; named and `inout` arguments are rejected. |
-| `e.f = v`, `e[i1, ..., in] = v` | Indices and `v` must be well-typed expressions of any type. |
-| `e.f op= v`, `e[i1, ..., in] op= v` | Same rules for compound updates. |
+| `e.f = v`, `e[idx] = v`, `e.f op= v`, `e[idx] op= v` | Index and `v` must be well-typed expressions of any type. |
 
 Indices, arguments and update values do not implicitly call `toExtern`. Assignment to an `Extern<T>` variable follows ordinary assignment rules. Operators rewritten as member calls follow the dynamic-call rules; `++` and `--` require integer operands. Multiple assignment checks each update independently.
 
-Examples, with `e: Extern<R>`:
+Examples, with `e: Extern<R>` and `x: Int64`:
 
 ```cangjie
-e.f(1, "a")              // type Extern<R>; arguments are not converted
-e[0] = "a"               // type Extern<R>; value is not converted
-e.f += 1                 // type Extern<R>
-e + 1                    // type Extern<R> through a member call
+e.f                      // type Extern<R>
+e.f.g.h                  // type Extern<R>; each member access is dynamic
+e[0]["k"]                // type Extern<R>; each subscript is dynamic
+e[x, "k"]                // type Extern<R>; indices of any type
+e(1, "a")                // type Extern<R>; e is called as a function
+e.f(1, "a")              // type Extern<R>; arguments will not be converted
+e.f(1)(2)                // type Extern<R>; the result is called again
+e.f { => 1 }             // type Extern<R>; the trailing lambda is an argument
+e.f(e.g)                 // type Extern<R>; Extern<R> arguments are passed as they are
+e.f = e.g                // type Extern<R>
+e[0] = "a"               // type Extern<R>; value will not be converted
+e.f += 1                 // type Extern<R>; literal 1 will not be converted
+e[0] += 1                // type Extern<R>
+(e.f, e[0]) = (1, "a")   // each update is checked independently
+e + 1                    // type Extern<R>; desugared as `e.+(1)`
+let i: Int64 = e.f       // type error: no implicit conversion from Extern<R>
 if (e < 1) {}            // type error: condition must be Bool
-if ((Bool)(e < 1)) {}    // explicit conversion to Bool
+e.f(p: 1)                // type error: named arguments are rejected
+e.f(inout x)             // type error: inout arguments are rejected
 e++                      // type error: integer required
 ```
 
