@@ -641,13 +641,16 @@ e++                      // type error: integer required
 
 ##### Forced cast
 
-At the desugaring stage the remaining operations `(U)e` are not ambiguous anymore and can be desugared as `T.fromExtern<U>(BUILD_TREE(e))`, for  `e : Extern<T>` and `T <: ForeignRuntime`. The desugaring function `BUILD_TREE` is defined below.
+At the desugaring stage the remaining operations `(U)e` are not ambiguous anymore and can be desugared as `T.fromExtern<U>(BUILD_TREE(e))`, for `e: Extern<T>` and `T <: ForeignRuntime<T>`. The desugaring function `BUILD_TREE` is defined below.
 
 ##### Implicit conversion to `Extern<T>` <span id="implicit-conversion-to-externt"></span>
 
-When `cjexp` of type `U` (with `U != Extern<T>`) is in a context where an expression of type `Extern<T>` is expected (either as (1) right-hand side of variable declaration; (2) right-hand side of assignment; (3) argument for function-like calls; (4) argument to return; (5) last expression of body of function; (6) default parameter value; (7) element of an array or tuple literal, when the expected type of that element is `Extern<T>`; (8) branch of an `if`/`match`/`try`), we desugar it into `T.toExtern<U>(cjexp)`. Cases (7) and (8) apply only when the literal or the `if`/`match`/`try` is itself in one of these contexts, e.g. `let a: Array<Extern<R>> = [1, "a"]` or `let x: Extern<R> = if (c) { 1 } else { "a" }`. The elements and branches can be any expression, not only literals: `let a: Array<Extern<R>> = [x, x + 1, f()]` converts each of the three elements.
+Each expression `exp: U` accepted by the [implicit conversion](#implicit-conversion) rules, where `U` is neither `Extern<T>` nor `Nothing`, is desugared into `T.toExtern<U>(exp)`. `exp` can be any expression, not only a literal: `let a: Array<Extern<R>> = [x, x + 1, f()]` converts each of the three elements.
 
-Whether the elements of a literal are converted depends on the expected type of the literal. With `Array<Extern<R>>` each element is converted. With `Extern<R>` the whole literal is converted: `let a: Extern<R> = [x, 12]`, with `x: Int64`, is desugared into `R.toExtern<Array<Int64>>([x, 12])`.
+The conversion is applied where the type checker accepted `exp`:
+- for a literal, to its elements when the literal is expected to be `Array<Extern<T>>` or a tuple with `Extern<T>` components, and to the whole literal when it is expected to be `Extern<T>`: `let a: Extern<R> = [x, 12]`, with `x: Int64`, is desugared into `R.toExtern<Array<Int64>>([x, 12])`;
+- for an expression made of blocks of code, never to the whole expression but to the last expression of each block giving its value: each branch of an `if`, each case of a `match`, the try block, each `catch` and each effect handler of a `try`, and the body of `synchronized`;
+- for a function or lambda body, to its last expression.
 
 **Example 1**:
 Assume `cjexp` has type `U` with `U != Extern<T>`. Then:
@@ -682,7 +685,7 @@ let b: Extern<R> = [x, 12]
 is desugared into
 
 ```cangjie
-let a: Array<Extern<R>> = [R.toExtern<Int64>(1), R.toExtern<String>("a")]
+let a1: Array<Extern<R>> = [R.toExtern<Int64>(1), R.toExtern<String>("a")]
 
 let x: Int64 = 42
 let a2: Array<Extern<R>> = [R.toExtern<Int64>(x), R.toExtern<Int64>(12)]
@@ -694,12 +697,20 @@ let b: Extern<R> = R.toExtern<Array<Int64>>([x, 12])
 
 ```cangjie
 let x: Extern<R> = if (c) { 1 } else { "a" }
+let y: Extern<R> = match (n) {
+    case 0 => println("zero"); 0
+    case _ => e
+}
 ```
 
 is desugared into
 
 ```cangjie
 let x: Extern<R> = if (c) { R.toExtern<Int64>(1) } else { R.toExtern<String>("a") }
+let y: Extern<R> = match (n) {
+    case 0 => println("zero"); R.toExtern<Int64>(0)
+    case _ => e                                    // e: Extern<R> needs no conversion
+}
 ```
 
 ##### Dynamic Extern expression desugaring
@@ -719,8 +730,10 @@ DESUGAR(e1[i] = e2) = // if e1 has type Extern<T>
     T.eval(ExternIndexedUpdate(BUILD_TREE(e1), BUILD_TREE(i), BUILD_TREE(e2)))
 DESUGAR(e1(e2, e3, ...)) = // if e1 has type Extern<T>
     T.eval(ExternFunctionCall(BUILD_TREE(e1), [BUILD_TREE(e2), BUILD_TREE(e3), ...]))
-DESUGAR(e1 op= e2) = // if e1 has type Extern<T>
+DESUGAR(e1 op= e2) = // if e1 is e.f or e[i] with e of type Extern<T>
     T.eval(ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD_TREE(e2)))
+DESUGAR(x op= e2) = // if x is a variable of type Extern<T>
+    x = DESUGAR(x.op(e2))
 DESUGAR(base) = // expressions without smaller subexpressions are preserved as they are
     base
 DESUGAR(exp) = // otherwise, for desugar sub expressions and preserve structure
@@ -739,7 +752,12 @@ BUILD_TREE(e1 op= e2)       = ExternCompoundAssignment(BUILD_TREE(e1), op, BUILD
 BUILD_TREE(exp)             = MAP(DESUGAR, exp)    // otherwise, desugar subexpressions and preserve structure
 ```
 
-For `Extern` expressions, `BUILD_TREE` builds dynamic `Extern` trees. For non-`Extern` Cangjie expressions, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its subexpressions.
+For `Extern` expressions, `BUILD_TREE` builds dynamic `Extern` trees. For non-`Extern` Cangjie expressions, `MAP(DESUGAR, exp)` preserves the outer expression and desugars its subexpressions. These are leaves of the tree and keep their own type: indices, arguments and update values are not converted with `toExtern`, as stated in [dynamic operations](#dynamic-operations).
+
+The other dynamic operations of the type checking rules reduce to the cases above:
+- `e1[i1, ..., in]` is desugared as `e1[i1]...[in]`, and `e1[i1, ..., in] = e2` as `e1[i1]...[in-1][in] = e2`;
+- an operator is first rewritten as a member call by the type checker, as for any operator overloading: `e1 op e2` becomes `e1.op(e2)`, e.g. `e1 + 1` becomes `e1.+(1)`, and `op e1` becomes `e1.op()`, e.g. `-e1` becomes `e1.-()`, which are dynamic calls;
+- a multiple assignment is desugared into single assignments before `DESUGAR` (see [Multiple Assignment Expression](#multiple-assignment-expression)).
 
 **IMPORTANT**: For the `Extern` expression trees, the evaluation order is defined by the foreign-runtime implementation; for non-`Extern` Cangjie expressions, the standard Cangjie evaluation order applies. The specification must account for this distinction.
 
@@ -834,6 +852,17 @@ DESUGAR(e1.a.b(e2.c, e3[0], n + 1)) =
                 ]
             )
     )
+```
+
+Example 8:
+
+For `e1: Extern<T>` and a variable `x: Extern<T>`.
+
+```cangjie
+DESUGAR(e1[0, "k"])     = T.eval(ExternIndexedAccess(ExternIndexedAccess(e1, 0), "k"))
+DESUGAR(e1.a + 1)       = T.eval(ExternFunctionCall(ExternMemberAccess(ExternMemberAccess(e1, "a"), "+"), [1]))
+DESUGAR(-e1)            = T.eval(ExternFunctionCall(ExternMemberAccess(e1, "-"), []))
+DESUGAR(x += 1)         = x = T.eval(ExternFunctionCall(ExternMemberAccess(x, "+"), [1]))
 ```
 
 #### Other forms of assignment
